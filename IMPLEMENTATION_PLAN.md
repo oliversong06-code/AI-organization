@@ -176,3 +176,140 @@ integration:{ configure, update, disable }
 
 프로젝트 완성. 새 경로(`C:\dev\claude-office-app`)에서 Claude Code 세션을 열면 `.mcp.json`과
 `company-manager` 스킬이 인식되어 실제 사용을 시작할 수 있다.
+
+---
+
+# Phase 2 — 운영 정책 전면 개편 (2026-07-21 착수)
+
+## 착수 전 현재 상태 점검
+
+1단계 완료 이후 사용자가 실제로 `C:\dev\claude-office-app`에서 Claude Code 세션을 열어 앱을
+사용했다. **dev.db에는 이제 실제 데이터가 있다** — 이번 Phase 2의 최우선 제약은 이 데이터를
+절대 건드리지 않는 것이다.
+
+- Department 1개: 리서치·보고서팀(officeZone=open-workspace-1에 배정됨)
+- Employee 1명: 리오(리서치 애널리스트, 리서치·보고서팀 소속, rank 없음 → 마이그레이션 필요)
+- Task 1개: completed 상태, "AI 회사 운영 시스템 검증 보고서 작성"
+- Artifact 1개: `workspace/artifacts/first-test/system-validation-report.md`
+- ApprovalRequest 4개: 전부 이미 `approved` 상태(department create/update, employee create, task create) — **현재 pending 상태인 것은 없음**, 따라서 정책 변경으로 인한 강제 취소 대상은 현재 0건(마이그레이션 스크립트는 향후를 위해 반드시 구현하되 지금은 no-op으로 검증됨)
+- Skill 6개(seed 카탈로그, 전부 installed:false), EmployeeSkill 0개, Integration 0개, Automation 0개, ActivityLog 7개
+
+또한 `claude` CLI가 이 작업 환경 PATH에 없음을 확인했다(`claude --help` 실행 불가). 4장의
+Worker→Claude CLI 비대화형 실행 모듈은 이 사실을 전제로 "CLI 미발견 시 Job을 failed로 안전
+종료"하도록 방어적으로 구현하고, 반복 CLI 호출 테스트는 전부 모킹한다(사용자 16장 지시와도 일치).
+
+## 핵심 설계 결정
+
+### 승인 정책 축소
+`APPROVAL_REGISTRY`를 `department.create`, `employee.create` 두 조합만 남기고 전부 제거한다.
+task/automation/skill/integration의 propose_* 도구와 approve/reject 경로는 이 두 조합 외에는
+`unknown_action`으로 이미 거부되므로(기존 `materialize.ts` 로직 재사용) 별도 차단 로직이 거의
+필요 없다 — 화이트리스트를 줄이는 것 자체가 곧 "다른 종류는 명시적으로 거부"를 만족시킨다.
+`ApprovalStatus`에 `cancelled_by_policy_change`를 추가하고, 정책 변경 시점의 pending 중
+department.create/employee.create가 아닌 요청을 이 상태로 전환하는 일회성 마이그레이션
+스크립트(`scripts/migrate-policy-v2.ts`)를 작성한다(현재는 대상 0건이지만 재실행 가능하게 유지).
+
+department/employee의 update(일반 정보 수정, 공간/좌석 배치, 설명 변경)는 **직접 실행 MCP
+도구**(`update_department`, `update_employee`)로 전환하고 ActivityLog만 남긴다. archive는
+MCP 도구로 노출하지 않고 **웹앱 사용자 직접 제어**(기존 Task/Automation 패턴과 동일: 확인창 +
+ActivityLog)로만 가능하다 — "회사 운영 규칙에 따른 자동 보관"은 이번 범위에서 규칙 엔진을
+새로 만들지 않고, 사용자 직접 클릭 경로만 구현한다(향후 필요 시 확장 가능하도록 함수 분리).
+
+### 직급(rank) 시스템
+Employee에 `rank Int @default(1)`(1~4, Zod로 범위 강제) 추가 — DB 기본값 1이 기존 리오 행을
+자동으로 rank 1로 마이그레이션한다(사용자가 "임의로 높이지 말라"고 한 요구사항과 일치, 별도
+백필 스크립트 불필요). `AppSetting.employeeRequestMinRank`(기본값 3)를 마이그레이션 스크립트로
+1회 upsert한다(seed.ts 재실행 아님).
+
+`propose_employee`(employeeCreateSchema)에 요구사항 3장의 모든 필드(요청자/요청자 직급/부서/
+이름 제안/목표 직급/역할/책임/사유/예상 업무/데이터 접근 범위/필요 스킬/배치 위치/미승인 시
+문제/중복 인력 검토 결과)를 추가한다. `createProposal`에 employee.create 전용 사전 검사를
+추가: `requestedByEmployeeId`가 있으면 그 직원의 rank를 조회해 `employeeRequestMinRank` 미만이면
+`rank_too_low`로 거부, 없으면(사용자가 직접 요청) 무조건 허용. 같은 부서+역할의 pending 요청이
+이미 있으면 idempotencyKey 없이도 `deduped:true`로 기존 요청을 반환한다(반복 생성 방지).
+
+직급 변경은 `update_employee_rank` MCP 도구로 노출하되 `authorizedBy: "user" | "rank4_employee"`
++ (rank4인 경우) `authorizingEmployeeId`를 요구하고, 지정된 직원이 실제 rank 4인지 DB로
+검증한다. 자기 자신의 rank를 올리는 것은 이 흐름상 자연히 차단된다(요청자 검증 대상은 항상
+"다른" rank4 직원이거나 사용자). 웹앱 직원 패널에도 동일 규칙의 직접 변경 UI를 추가한다.
+
+### Task/Worker 실행 구조
+`propose_task`와 task의 ApprovalRequest 경로를 완전히 제거하고 `create_task`/`update_task`/
+`assign_task`를 직접 실행 MCP 도구로 추가한다. Task 생성 시 즉시 `queued`이며, `assignedEmployeeId`가
+유효(존재·비보관)하면 `ExecutionJob(status:"pending")`을 함께 생성한다. 신규 `worker/` 모듈이
+pending Job을 폴링해 원자적으로 claim(조건부 `updateMany` where status='pending'으로 경합
+방지)하고, 동시 실행 개수를 제한하며, `worker/claudeCliRunner.ts`(모킹 가능한 주입형 실행자)로
+Claude Code CLI를 비대화형 실행한다. 실행 결과에 따라 초안 결과물 등록 → 검수 프로세스(아래) →
+`complete_task`/`fail_task`/`needs_review`로 이어진다. 오래된 lock(`lockedAt` 초과)은 별도
+복구 루틴이 pending으로 되돌리고 `attempts`를 증가시키며 `maxAttempts` 초과 시 failed로 확정한다.
+
+### 검수(Review) 시스템
+`ReviewPolicy`(하드코딩 없이 importance별 기본값 시드), `ReviewDecision`, `ArtifactVersion`을
+추가한다. 결과물은 항상 새 `ArtifactVersion`으로 쌓이고 기존 파일을 덮어쓰지 않는다. 작성자
+rank보다 높은 직급을 importance에 따라 순차 검수하며, 작성자와 동일 인물은 검수자가 될 수
+없다. 같은 부서에 적절한 상위 직급이 없으면 회사 전체에서 탐색하고, 그래도 없으면
+`status:"review_blocked"`로 두고 필요한 직급/역할을 기록한다(이 경우 rank3+ 직원이 직원 생성
+요청을 제안할 수 있음 — 위 직원 생성 정책과 동일 경로). 수정 요청(`revision_requested`) 시
+새 버전을 만들며 기본 최대 3회 초과 시 사용자에게는 승인 요청이 아닌 **알림**만 표시한다.
+
+### PDF 산출물
+사람이 읽는 문서형 결과물은 PDF로 최종 제공한다. Windows에서 한글이 깨지지 않는 방식을
+실제로 검증해 선택한다(후보: Playwright Chromium 인쇄, `@react-pdf/renderer`, PDFKit — 한글
+폰트 임베딩과 표/페이지 나눔이 실제로 되는지 확인 후 결정, 아래 조사 로그에 기록). 원본이
+CSV/XLSX인 경우 원본은 유지하고 PDF 요약본을 별도로 만든다. PDF 생성 실패 시 업무를
+completed로 처리하지 않는다.
+
+### 스킬 초기화
+기존 seed 스킬 6개는 어떤 EmployeeSkill에도 연결되어 있지 않음을 확인했다(EmployeeSkill=0건) →
+안전하게 삭제 가능. 삭제 후 Skill 0개, EmployeeSkill 0개가 새 초기 상태가 된다. Skill 모델
+필드를 요구사항 8장에 맞게 확장(instructions/allowedTools/compatibleRanks/compatibleDepartments/
+validationStatus)하고, 생성 자체는 승인 불필요하되 validationStatus가 통과해야 활성화되는
+구조를 유지한다.
+
+### 사무실 공간 표시 이름
+`OfficeZone.displayName`(초기값 "미배정 공간 N", 부서 배정 시 부서명으로 자동 갱신, 부서
+이동/보관 시 복구)을 추가하고 zone 라벨을 **정적 SVG에 박아넣지 않고** 실시간 데이터 기반
+레이어로 다시 렌더링한다(office-empty.svg의 baked-in `<text>` 라벨 제거).
+
+### 결과물 부서별 분류 + DataAsset
+Artifact에 `departmentId`(기본 담당자 부서 자동 유도) + 공동 작업을 위한 `ArtifactDepartment`
+조인 테이블을 추가한다. 결과물 보관함을 회사 공용/부서별(최종/검수중/수정요청/보관) 구조로
+재구성한다. 결과물과 별도로 AI 직원 전용 내부 자료 저장소 `DataAsset`(+ 부서/직원/업무 연결,
+`DataAccessLog`)을 신설하고, 항상 workspace 내부 승인된 data workspace 경로만 사용하며
+checksum 기반 중복 감지와 유효기간 확인을 구현한다.
+
+### 사무실 시각 개편
+`Seat` 모델(zone별 좌석 슬롯, zone-relative 정규화 좌표)을 추가한다. 기존 desk 배경 그래픽과
+동일 좌표를 좌석 슬롯으로 재사용해 캐릭터-가구 정렬 비용을 최소화하고, open_workspace/
+private_office 존에 좌석을 추가로 확충해 배경 SVG를 재생성한다. 직원 상태(idle/queued/running/
+reviewing/revision_requested/completed/failed/review_blocked)별 자세·아이콘·저강도 애니메이션을
+추가하고 `prefers-reduced-motion`을 지원한다. 좌석은 부서 배정/이동 시 자동 할당·해제한다.
+
+### MCP 도구/권한 재구성
+28개 도구를 요구사항 13장 목록에 맞게 재구성한다(propose_department/propose_employee/
+get_approval_status만 승인형으로 유지, 나머지는 조회 또는 직접 실행). `.claude/settings.json`
+프로젝트 전용 파일에 company-manager MCP 도구별 정확한 allowlist를 등록해 매번 확인창이
+뜨지 않게 하되, Bash 전체·프로젝트 외부 쓰기·영구 삭제·시스템 설정 변경·자격증명 조회 등은
+allowlist에 넣지 않는다. `--dangerously-skip-permissions`류의 전면 허용은 사용하지 않는다.
+
+## 구현 순서 (진행 로그에 단계별 기록)
+
+P2-1 스키마 마이그레이션(추가 전용) + 데이터 백필 스크립트
+P2-2 승인 정책 축소(레지스트리·상태·API 거부) + pending 취소 마이그레이션
+P2-3 department/employee 직접 실행 도구 + 사용자 직접 archive/rank 제어
+P2-4 Task/Worker 실행 구조(ExecutionJob, create/update/assign_task, worker 모듈)
+P2-5 검수 시스템(ReviewPolicy/ReviewDecision/ArtifactVersion)
+P2-6 PDF 생성(라이브러리 조사·선택·구현)
+P2-7 스킬 초기화 + 모델 확장
+P2-8 사무실 공간 표시 이름 자동화
+P2-9 결과물 부서별 분류 화면
+P2-10 DataAsset 서브시스템
+P2-11 사무실 시각 개편(Seat, 상태별 렌더링)
+P2-12 MCP 도구 재구성 최종본 + README/SKILL.md 동기화
+P2-13 Claude Code 프로젝트 권한 설정(.claude/settings.json)
+P2-14 종합 테스트 + 프로덕션 빌드 + 최종 보고
+
+각 단계 완료 시 진행 로그에 변경 파일·테스트 결과·dev.db 데이터 보존 확인을 간결하게 기록한다.
+
+## Phase 2 진행 로그
+
