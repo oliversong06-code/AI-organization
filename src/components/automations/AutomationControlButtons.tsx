@@ -1,5 +1,6 @@
 "use client";
 
+import { mutationFetch } from "@/lib/mutationFetch";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,7 @@ export function AutomationControlButtons({ automationId, enabled, archived, onDo
   async function run(action: string) {
     setBusy(true);
     try {
-      const res = await fetch(`/api/automations/${automationId}/${action}`, { method: "POST" });
+      const res = await mutationFetch(`/api/automations/${automationId}/${action}`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error ?? "처리에 실패했습니다");

@@ -1,5 +1,6 @@
 "use client";
 
+import { mutationFetch } from "@/lib/mutationFetch";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useArtifacts } from "@/lib/hooks/useArtifacts";
@@ -19,7 +20,7 @@ export default function ArtifactsPage() {
   async function handleArchive(id: string) {
     setBusyId(id);
     try {
-      const res = await fetch(`/api/artifacts/${id}/archive`, { method: "POST" });
+      const res = await mutationFetch(`/api/artifacts/${id}/archive`, { method: "POST" });
       if (!res.ok) {
         const data = await res.json();
         toast.error(data.error ?? "보관 처리에 실패했습니다");

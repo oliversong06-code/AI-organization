@@ -1,5 +1,6 @@
 "use client";
 
+import { mutationFetch } from "@/lib/mutationFetch";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -72,7 +73,7 @@ export function ApprovalCard({ approval, onResolved }: Props) {
   async function handleApprove() {
     setBusy(true);
     try {
-      const res = await fetch(`/api/approvals/${approval.id}/approve`, { method: "POST" });
+      const res = await mutationFetch(`/api/approvals/${approval.id}/approve`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error ?? "승인 처리에 실패했습니다");
@@ -88,7 +89,7 @@ export function ApprovalCard({ approval, onResolved }: Props) {
   async function handleReject() {
     setBusy(true);
     try {
-      const res = await fetch(`/api/approvals/${approval.id}/reject`, {
+      const res = await mutationFetch(`/api/approvals/${approval.id}/reject`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason: rejectReason || "사유 없음" }),

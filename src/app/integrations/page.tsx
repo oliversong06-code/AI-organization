@@ -1,5 +1,6 @@
 "use client";
 
+import { mutationFetch } from "@/lib/mutationFetch";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useIntegrations } from "@/lib/hooks/useAutomations";
@@ -23,7 +24,7 @@ export default function IntegrationsPage() {
   async function handleScan(id: string) {
     setScanningId(id);
     try {
-      const res = await fetch(`/api/integrations/${id}/scan`, { method: "POST" });
+      const res = await mutationFetch(`/api/integrations/${id}/scan`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error ?? "동기화에 실패했습니다");

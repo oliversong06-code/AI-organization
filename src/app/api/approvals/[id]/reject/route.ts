@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { idParamSchema } from "@/lib/zod-schemas/common";
 import { rejectApprovalRequest } from "@/lib/approvals/materialize";
-import { assertSameOrigin, CrossOriginRequestError } from "@/lib/csrf";
+import { csrfGuard } from "@/lib/csrf";
 
 const ERROR_STATUS: Record<string, number> = {
   not_found: 404,
@@ -13,14 +13,8 @@ const ERROR_STATUS: Record<string, number> = {
 const bodySchema = z.object({ reason: z.string().min(1) });
 
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
-  try {
-    assertSameOrigin(req);
-  } catch (err) {
-    if (err instanceof CrossOriginRequestError) {
-      return NextResponse.json({ error: err.message }, { status: 403 });
-    }
-    throw err;
-  }
+  const blocked = await csrfGuard(req);
+  if (blocked) return blocked;
 
   const { id } = idParamSchema.parse(await context.params);
   const { reason } = bodySchema.parse(await req.json());
