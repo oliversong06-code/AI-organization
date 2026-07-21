@@ -6,6 +6,7 @@ export interface EmployeeListItem {
   id: string;
   name: string;
   role: string;
+  rank: number;
   status: EmployeeStatus;
   avatarId: string;
   posX: number;
@@ -34,7 +35,7 @@ export function useEmployees() {
 }
 
 export function useEmployee(id: string | null) {
-  const { data, error, isLoading } = useSWR<{
+  const { data, error, isLoading, mutate } = useSWR<{
     employee: EmployeeDetail;
     recentActivity: Array<{ id: string; action: string; timestamp: string; detail: unknown }>;
   }>(id ? `/api/employees/${id}` : null, jsonFetcher, { refreshInterval: 4000 });
@@ -43,5 +44,6 @@ export function useEmployee(id: string | null) {
     recentActivity: data?.recentActivity ?? [],
     isLoading,
     error,
+    mutate,
   };
 }

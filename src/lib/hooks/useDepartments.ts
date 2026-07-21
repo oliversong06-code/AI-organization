@@ -32,10 +32,10 @@ export function useDepartments() {
 }
 
 export function useDepartment(id: string | null) {
-  const { data, error, isLoading } = useSWR<{ department: DepartmentDetail }>(
+  const { data, error, isLoading, mutate } = useSWR<{ department: DepartmentDetail }>(
     id ? `/api/departments/${id}` : null,
     jsonFetcher,
     { refreshInterval: 4000 }
   );
-  return { department: data?.department ?? null, isLoading, error };
+  return { department: data?.department ?? null, isLoading, error, mutate };
 }

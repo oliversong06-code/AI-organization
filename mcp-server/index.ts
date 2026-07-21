@@ -14,12 +14,14 @@ import { registerApprovalTools } from "./tools/approvals";
 /**
  * Local-only MCP server for the AI company app. stdio transport only — no
  * network port is ever opened. Every tool here is allowlisted (see
- * IMPLEMENTATION_PLAN.md §6): 28 tools total, and none of them can
- * approve/reject a proposal, cancel one, or directly mutate an
- * employee/department/automation/skill/integration — only propose_* tools
- * (which write an ApprovalRequest, nothing else) and the Task
- * execution-only tools (start_task/add_task_log/mark_task_needs_review/
- * complete_task/fail_task) plus register_artifact.
+ * IMPLEMENTATION_PLAN.md §6, updated by Phase 2's P2-2/P2-3 reshuffle) and
+ * none of them can approve/reject a proposal, cancel one, or archive an
+ * employee/department/task/automation — only propose_department/
+ * propose_employee (which write an ApprovalRequest, nothing else), a set of
+ * direct-execution update/move/rank tools, and the Task execution-only
+ * tools (start_task/add_task_log/mark_task_needs_review/complete_task/
+ * fail_task) plus register_artifact. Final tool count/list reconciliation
+ * against the spec happens in P2-12.
  */
 async function main() {
   const server = new McpServer({ name: "company-manager", version: "0.1.0" });

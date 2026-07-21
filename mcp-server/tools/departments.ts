@@ -2,6 +2,8 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { prisma } from "../../src/lib/prisma";
 import { createProposal } from "../../src/lib/approvals/propose";
+import { updateDepartment } from "../../src/lib/direct/departmentDirect";
+import { departmentUpdateSchema } from "../../src/lib/zod-schemas/direct-department-employee";
 import { approvalRiskLevelSchema } from "../../src/lib/enums";
 import { ok, err } from "../lib/toolResult";
 
@@ -66,6 +68,21 @@ export function registerDepartmentTools(server: McpServer) {
         riskLevel,
         idempotencyKey,
       });
+      if (!result.ok) return err(result.error, result.code);
+      return ok(result);
+    }
+  );
+
+  server.registerTool(
+    "update_department",
+    {
+      title: "부서 정보 수정",
+      description:
+        "부서의 일반 정보(이름/설명/색상 태그)를 수정하거나 다른 사무실 공간으로 재배정합니다. 승인 없이 즉시 실행되며 ActivityLog에 기록됩니다. 부서 보관은 이 도구로 불가하며 웹앱에서 사용자가 직접 처리합니다.",
+      inputSchema: { id: z.string().min(1), data: departmentUpdateSchema },
+    },
+    async ({ id, data }) => {
+      const result = await updateDepartment(id, data, "claude_code");
       if (!result.ok) return err(result.error, result.code);
       return ok(result);
     }

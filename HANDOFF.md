@@ -53,40 +53,20 @@
   `create_automation`/`update_automation`/`configure_integration`/`update_integration`
   직접 실행 도구 신설. 총 도구 28개 유지. **테스트 55개 통과, `npm run build` 성공.**
 
-## 지금 진행 중이던 것 (P2-3, 미완성 — 여기서부터 이어갈 것)
+## 지금 진행 중이던 것 (P2-3 완료, P2-4부터 이어갈 것)
 
-`src/lib/direct/departmentDirect.ts`까지만 작성됨(커밋됨, WIP 표시). **남은 일**:
+P2-3(department/employee 직접 실행 도구 + 사용자 직접 archive/rank 제어)이 2026-07-22
+세션에서 완료되었다(`employeeDirect.ts` 작성, MCP 도구 4개 신설, API 라우트 3개 신설, 웹 UI
+반영, 테스트 74개 통과, `npm run build` 성공, dev.db 데이터 보존 확인 — 자세한 내용은
+`IMPLEMENTATION_PLAN.md`의 Phase 2 진행 로그 P2-3 항목 참고).
 
-1. `src/lib/direct/employeeDirect.ts` 작성 — 다음 함수들:
-   - `updateEmployee(id, data: {name?, role?, departmentId?, avatarId?, skillIds?}, actor)` — 직접 실행, ActivityLog만.
-   - `moveEmployee(id, newOfficeZoneId, direction?)` — 기존 좌석 해제(Seat.employeeId=null) →
-     새 zone의 빈 좌석 탐색 → 배정 + posX/posY 스냅(빈 좌석 없으면 (0.5,0.5) 폴백).
-   - `archiveEmployee(id)` — **사용자 직접 제어 전용**(MCP 도구 아님), status=archived,
-     archivedAt, 좌석 해제.
-   - `changeEmployeeRank(id, newRank, authorizedBy: "user"|"rank4_employee", authorizingEmployeeId?)` —
-     rank4_employee인 경우 `authorizingEmployeeId`가 실제 rank 4이고 대상 본인이 아닌지 DB로
-     검증, 아니면 거부. `src/lib/zod-schemas/direct-department-employee.ts`에 이미
-     `employeeRankChangeSchema` 등 스키마 준비되어 있음(재사용할 것).
-2. `mcp-server/tools/departments.ts`에 `update_department` 직접 도구 추가(departmentDirect.ts의
-   updateDepartment 호출, archive는 MCP에 노출하지 않음).
-3. `mcp-server/tools/employees.ts`에 `update_employee`, `move_employee`, `update_employee_rank`
-   직접 도구 추가(archive는 MCP에 노출하지 않음).
-4. 사용자 직접 제어 API 라우트(기존 Task/Automation 패턴 그대로 복사, `src/lib/controls/routeHelpers.ts`
-   패턴 참고):
-   - `POST /api/departments/[id]/archive` (archiveDepartment 호출, csrfGuard 적용)
-   - `POST /api/employees/[id]/archive` (archiveEmployee 호출)
-   - `POST /api/employees/[id]/rank` (changeEmployeeRank 호출, authorizedBy="user" 고정 — 사용자가
-     웹에서 직접 누르는 것이므로)
-5. 웹 UI: `EmployeePanel.tsx`/`ZonePanel.tsx`(부서 표시 부분)에 보관 버튼(AlertDialog 확인) +
-   직원 패널에 rank 변경 select 추가. `mutationFetch` 사용할 것.
-6. 테스트: `src/lib/direct/departmentDirect.test.ts`, `employeeDirect.test.ts` — update/archive/
-   rank 변경 각각의 성공·실패 케이스, test.db 전용.
-7. `mcp-server/mcp-server.test.ts`의 도구 개수·목록 업데이트(update_department, update_employee,
-   move_employee, update_employee_rank 추가 — archive_department/archive_employee는 여전히
-   forbidden 목록에 있어야 함).
-8. `npx tsc --noEmit`, `npm run lint`, `npm test`, `npm run build` 전부 통과 확인.
-9. dev.db 데이터 보존 확인(department=1/employee=1/task=1/artifact=1/approvalRequest=4 그대로).
-10. `IMPLEMENTATION_PLAN.md`의 Phase 2 진행 로그에 P2-3 완료 기록 + git commit.
+**다음은 P2-4(Task/Worker 실행 구조)** — `IMPLEMENTATION_PLAN.md`의 "구현 순서"와 "핵심 설계
+결정 > Task/Worker 실행 구조" 절에 설계가 이미 문서화되어 있다. 요약: `create_task`/
+`update_task`/`assign_task` 직접 실행 MCP 도구를 `mcp-server/tools/tasks.ts`에 추가(현재
+list_tasks/get_task/start_task/add_task_log/mark_task_needs_review/complete_task/fail_task만
+있고 생성 도구가 없는 상태), Task 생성 시 즉시 queued + 담당자 유효하면 `ExecutionJob(pending)`
+자동 생성(스키마는 P2-1에서 이미 추가됨), `worker/` 디렉터리 신설(pending Job 원자적 claim,
+동시 실행 수 제한, 모킹 가능한 `claudeCliRunner.ts`, 오래된 lock 복구, `npm run worker` 스크립트).
 
 ## 남은 전체 로드맵 (P2-4 ~ P2-14)
 

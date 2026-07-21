@@ -2,6 +2,12 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { prisma } from "../../src/lib/prisma";
 import { createProposal } from "../../src/lib/approvals/propose";
+import { updateEmployee, moveEmployee, changeEmployeeRank } from "../../src/lib/direct/employeeDirect";
+import {
+  employeeUpdateSchema,
+  employeeMoveSchema,
+  employeeRankChangeSchema,
+} from "../../src/lib/zod-schemas/direct-department-employee";
 import { approvalRiskLevelSchema, directionSchema, employeeRankSchema } from "../../src/lib/enums";
 import { ok, err } from "../lib/toolResult";
 
@@ -93,6 +99,51 @@ export function registerEmployeeTools(server: McpServer) {
         riskLevel,
         idempotencyKey,
       });
+      if (!result.ok) return err(result.error, result.code);
+      return ok(result);
+    }
+  );
+
+  server.registerTool(
+    "update_employee",
+    {
+      title: "직원 정보 수정",
+      description:
+        "직원의 일반 정보(이름/역할/소속 부서/아바타/보유 스킬)를 수정합니다. 승인 없이 즉시 실행되며 ActivityLog에 기록됩니다. 사무실 공간/좌석 이동은 move_employee를, 직급 변경은 update_employee_rank를, 보관은 웹앱에서 사용자가 직접 처리합니다(이 도구로 불가).",
+      inputSchema: { id: z.string().min(1), data: employeeUpdateSchema },
+    },
+    async ({ id, data }) => {
+      const result = await updateEmployee(id, data, "claude_code");
+      if (!result.ok) return err(result.error, result.code);
+      return ok(result);
+    }
+  );
+
+  server.registerTool(
+    "move_employee",
+    {
+      title: "직원 사무실 공간 이동",
+      description:
+        "직원을 다른 사무실 공간(zone)으로 이동시킵니다. 기존 좌석을 해제하고 대상 공간의 빈 좌석에 자동 배정하며(빈 좌석이 없으면 공간 중앙에 배치), 승인 없이 즉시 실행되어 ActivityLog에 기록됩니다.",
+      inputSchema: employeeMoveSchema.extend({ id: z.string().min(1) }).shape,
+    },
+    async ({ id, officeZoneId, direction }) => {
+      const result = await moveEmployee(id, officeZoneId, direction, "claude_code");
+      if (!result.ok) return err(result.error, result.code);
+      return ok(result);
+    }
+  );
+
+  server.registerTool(
+    "update_employee_rank",
+    {
+      title: "직원 직급 변경",
+      description:
+        "직원의 직급(1~4)을 변경합니다. authorizedBy가 'rank4_employee'이면 authorizingEmployeeId가 실제로 직급 4인 다른 직원이어야 하며(본인 스스로는 변경 불가), 아니면 거부됩니다. authorizedBy가 'user'인 경로는 웹앱에서 사용자가 직접 클릭할 때만 사용됩니다.",
+      inputSchema: employeeRankChangeSchema.extend({ id: z.string().min(1) }).shape,
+    },
+    async ({ id, newRank, authorizedBy, authorizingEmployeeId }) => {
+      const result = await changeEmployeeRank(id, newRank, authorizedBy, authorizingEmployeeId);
       if (!result.ok) return err(result.error, result.code);
       return ok(result);
     }

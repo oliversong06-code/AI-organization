@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { toast } from "sonner";
 import {
   Sheet,
   SheetContent,
@@ -8,8 +10,21 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useOfficeZones } from "@/lib/hooks/useOfficeZones";
 import { useDepartment } from "@/lib/hooks/useDepartments";
+import { mutationFetch } from "@/lib/mutationFetch";
 
 interface Props {
   zoneKey: string | null;
@@ -25,7 +40,26 @@ export function ZonePanel({ zoneKey, onClose }: Props) {
   const { zones, isLoading: zonesLoading } = useOfficeZones();
   const zone = zones.find((z) => z.key === zoneKey) ?? null;
   const departmentId = zone?.departments[0]?.id ?? null;
-  const { department, isLoading: deptLoading } = useDepartment(departmentId);
+  const { department, isLoading: deptLoading, mutate } = useDepartment(departmentId);
+  const [busy, setBusy] = useState(false);
+
+  async function handleArchive() {
+    if (!department) return;
+    setBusy(true);
+    try {
+      const res = await mutationFetch(`/api/departments/${department.id}/archive`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "보관에 실패했습니다");
+      } else {
+        toast.success("보관되었습니다");
+        mutate();
+        onClose();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <Sheet open={!!zoneKey} onOpenChange={(open) => !open && onClose()}>
@@ -55,6 +89,28 @@ export function ZonePanel({ zoneKey, onClose }: Props) {
             </SheetHeader>
             <div className="space-y-4 px-4 pb-6 text-sm">
               {department.description && <p className="text-zinc-700">{department.description}</p>}
+
+              {department.status !== "archived" && (
+                <AlertDialog>
+                  <AlertDialogTrigger render={<Button size="sm" variant="destructive" disabled={busy} />}>
+                    보관
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>{department.name} 부서를 보관할까요?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        사무실 공간 라벨이 기본값으로 되돌아갑니다. 이 작업은 활동 로그에
+                        기록됩니다.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>취소</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleArchive}>보관</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+
               <div>
                 <div className="mb-1 text-xs font-medium text-zinc-400">소속 직원</div>
                 {department.employees.length === 0 ? (
