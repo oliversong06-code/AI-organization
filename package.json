@@ -9,6 +9,8 @@
     "lint": "eslint",
     "mcp": "tsx mcp-server/index.ts",
     "db:studio": "prisma studio",
+    "db:seed": "tsx prisma/seed.ts",
+    "test:seed": "dotenv -e .env.test -- tsx prisma/seed.ts",
     "test": "dotenv -e .env.test -- vitest run",
     "test:watch": "dotenv -e .env.test -- vitest",
     "test:studio": "dotenv -e .env.test -- prisma studio"
