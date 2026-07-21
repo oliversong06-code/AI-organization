@@ -46,7 +46,7 @@ describe("MCP server (spawned process, test.db only)", () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
 
-    expect(names).toHaveLength(35);
+    expect(names).toHaveLength(37);
 
     const forbidden = [
       "approve_request",
@@ -100,6 +100,8 @@ describe("MCP server (spawned process, test.db only)", () => {
         "register_artifact",
         "list_artifacts",
         "get_artifact",
+        "submit_review_decision",
+        "revise_artifact",
         "list_automations",
         "get_automation",
         "create_automation",
