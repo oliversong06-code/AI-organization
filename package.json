@@ -8,6 +8,7 @@
     "start": "next start -H 127.0.0.1",
     "lint": "eslint",
     "mcp": "tsx mcp-server/index.ts",
+    "worker": "tsx worker/index.ts",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "test:seed": "dotenv -e .env.test -- tsx prisma/seed.ts",

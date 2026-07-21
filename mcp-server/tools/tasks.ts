@@ -8,9 +8,15 @@ import {
   markTaskNeedsReview,
   startTask,
 } from "../../src/lib/execution/taskExecution";
+import { createTask, updateTask, assignTask } from "../../src/lib/direct/taskDirect";
+import { taskCreateSchema, taskUpdateSchema, taskAssignSchema } from "../../src/lib/zod-schemas/direct-task";
 import { ok, err } from "../lib/toolResult";
 
-const ERROR_CODE = { not_found: "not_found", invalid_state: "invalid_state" } as const;
+const ERROR_CODE = {
+  not_found: "not_found",
+  invalid_state: "invalid_state",
+  invalid_employee: "invalid_employee",
+} as const;
 
 export function registerTaskTools(server: McpServer) {
   server.registerTool(
@@ -120,6 +126,51 @@ export function registerTaskTools(server: McpServer) {
     },
     async ({ taskId, errorMessage, retryable }) => {
       const result = await failTask(taskId, errorMessage, retryable);
+      if (!result.ok) return err(result.error, ERROR_CODE[result.code]);
+      return ok(result);
+    }
+  );
+
+  server.registerTool(
+    "create_task",
+    {
+      title: "업무 생성",
+      description:
+        "새 업무를 생성합니다. 승인 없이 즉시 queued 상태로 만들어지며, assignedEmployeeId가 유효한(존재·비보관) 직원이면 실행 작업(ExecutionJob)이 함께 생성되어 워커가 곧바로 처리할 수 있게 됩니다. 업무 보관은 웹앱에서 사용자가 직접 처리합니다(이 도구로 불가).",
+      inputSchema: taskCreateSchema.shape,
+    },
+    async (payload) => {
+      const result = await createTask(payload, "claude_code");
+      if (!result.ok) return err(result.error, ERROR_CODE[result.code]);
+      return ok(result);
+    }
+  );
+
+  server.registerTool(
+    "update_task",
+    {
+      title: "업무 정보 수정",
+      description:
+        "업무의 일반 정보(제목/설명/우선순위/입력 파일/필요 스킬/요청 권한)를 수정합니다. 상태나 담당자는 이 도구로 변경할 수 없습니다(상태는 start_task 등 실행 도구를, 담당자는 assign_task를 사용).",
+      inputSchema: { id: z.string().min(1), data: taskUpdateSchema },
+    },
+    async ({ id, data }) => {
+      const result = await updateTask(id, data, "claude_code");
+      if (!result.ok) return err(result.error, ERROR_CODE[result.code]);
+      return ok(result);
+    }
+  );
+
+  server.registerTool(
+    "assign_task",
+    {
+      title: "업무 담당자 배정",
+      description:
+        "업무의 담당 직원을 배정하거나 변경합니다. 대상 직원은 존재하고 보관되지 않아야 합니다. 업무가 아직 queued 상태이고 실행 작업이 없었다면 이 시점에 ExecutionJob이 생성됩니다.",
+      inputSchema: taskAssignSchema.extend({ id: z.string().min(1) }).shape,
+    },
+    async ({ id, assignedEmployeeId }) => {
+      const result = await assignTask(id, assignedEmployeeId, "claude_code");
       if (!result.ok) return err(result.error, ERROR_CODE[result.code]);
       return ok(result);
     }
