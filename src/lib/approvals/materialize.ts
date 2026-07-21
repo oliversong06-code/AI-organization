@@ -2,8 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { withTransaction } from "@/lib/withTransaction";
 import { logActivity } from "@/lib/activity-log";
 import { getProposalSchema } from "@/lib/approval-registry";
-import { canProposeArchive } from "@/lib/taskTransitions";
-import type { TaskStatus } from "@/lib/enums";
 import type { Prisma } from "@/generated/prisma/client";
 
 type TxClient = Prisma.TransactionClient;
@@ -16,9 +14,7 @@ type ErrorCode =
   | "expired"
   | "unknown_action"
   | "invalid_payload"
-  | "version_conflict"
-  | "target_not_found"
-  | "invalid_state";
+  | "version_conflict";
 
 export type MaterializeResult =
   | { ok: true; entityId: string | null }
@@ -33,12 +29,13 @@ class MaterializeError extends Error {
 }
 
 /**
- * Approves a pending ApprovalRequest: re-validates the payload against the
- * CURRENT registry schema (not just whatever was true at proposal time),
- * checks for an entityVersion conflict, and materializes the real row
- * inside one transaction + ActivityLog entry. This is the only code path
- * (alongside rejectApprovalRequest) that can turn a proposal into real
- * data — it is deliberately never exposed as an MCP tool.
+ * Approves a pending ApprovalRequest. Phase 2: the registry only ever
+ * contains department.create and employee.create, so this only ever
+ * materializes one of those two — everything else was rejected earlier
+ * (unknown_action) by the registry lookup, before this function is
+ * reachable. Re-validates the payload against the CURRENT schema (not
+ * just whatever was true at proposal time) and materializes inside one
+ * transaction + ActivityLog entry.
  */
 export async function approveApprovalRequest(
   id: string,
@@ -63,7 +60,8 @@ export async function approveApprovalRequest(
   if (!schema) {
     return {
       ok: false,
-      error: "승인 화이트리스트에 없는 entityType/action 조합입니다",
+      error:
+        "승인 화이트리스트에 없는 entityType/action 조합입니다 (department.create와 employee.create만 지원)",
       code: "unknown_action",
     };
   }
@@ -78,16 +76,20 @@ export async function approveApprovalRequest(
 
   try {
     const entityId = await withTransaction(async (tx) => {
-      const newEntityId = await materializeEntity(tx, request, parsed.data);
+      const newEntityId =
+        request.entityType === "department"
+          ? await materializeDepartmentCreate(tx, parsed.data)
+          : await materializeEmployeeCreate(tx, parsed.data);
+
       await tx.approvalRequest.update({
         where: { id: request.id },
         data: { status: "approved", resolvedAt: new Date(), resolvedBy },
       });
       await logActivity(tx, {
         actor: "user",
-        action: `${request.entityType}.${request.action}`,
+        action: `${request.entityType}.create`,
         entityType: request.entityType,
-        entityId: newEntityId ?? request.relatedEntityId ?? undefined,
+        entityId: newEntityId,
         detail: { approvalRequestId: request.id, summary: request.summary },
         approvalRequestId: request.id,
       });
@@ -136,7 +138,6 @@ export async function rejectApprovalRequest(
       actor: "user",
       action: `${request.entityType}.reject`,
       entityType: request.entityType,
-      entityId: request.relatedEntityId ?? undefined,
       detail: { approvalRequestId: request.id, reason },
       approvalRequestId: request.id,
     });
@@ -145,299 +146,86 @@ export async function rejectApprovalRequest(
   return { ok: true, entityId: null };
 }
 
-function assertVersion(currentVersion: number, expectedVersion: number | null) {
-  if (expectedVersion !== null && currentVersion !== expectedVersion) {
-    throw new MaterializeError(
-      "version_conflict",
-      "대상이 제안 이후 변경되었습니다. 다시 제안해야 합니다."
-    );
-  }
-}
+/** create-only now — department update/archive are direct MCP tools /
+ * user-direct-control (see src/lib/direct/departmentDirect.ts). Auto-
+ * assigns an office zone when none was proposed (preferring work zones
+ * over shared/amenity ones) and renames that zone's display label to the
+ * new department's name, per §2 of the Phase 2 spec. */
+async function materializeDepartmentCreate(tx: TxClient, payload: Payload): Promise<string> {
+  let officeZoneId: string | undefined = payload.officeZoneId;
 
-async function materializeEntity(
-  tx: TxClient,
-  request: {
-    entityType: string;
-    action: string;
-    relatedEntityId: string | null;
-    entityVersion: number | null;
-  },
-  payload: Payload
-): Promise<string | null> {
-  const { entityType, action, relatedEntityId, entityVersion } = request;
-
-  switch (entityType) {
-    case "department":
-      return materializeDepartment(tx, action, relatedEntityId, entityVersion, payload);
-    case "employee":
-      return materializeEmployee(tx, action, relatedEntityId, entityVersion, payload);
-    case "task":
-      return materializeTask(tx, action, relatedEntityId, entityVersion, payload);
-    case "automation":
-      return materializeAutomation(tx, action, relatedEntityId, entityVersion, payload);
-    case "skill":
-      return materializeSkill(tx, action, relatedEntityId, entityVersion, payload);
-    case "integration":
-      return materializeIntegration(tx, action, relatedEntityId, entityVersion, payload);
-    default:
-      throw new MaterializeError("unknown_action", `unhandled entityType ${entityType}`);
-  }
-}
-
-async function materializeDepartment(
-  tx: TxClient,
-  action: string,
-  relatedEntityId: string | null,
-  entityVersion: number | null,
-  payload: Payload
-) {
-  if (action === "create") {
-    const created = await tx.department.create({
-      data: {
-        name: payload.name,
-        description: payload.description,
-        colorTag: payload.colorTag,
-        officeZoneId: payload.officeZoneId,
-      },
+  if (!officeZoneId) {
+    const preferred = await tx.officeZone.findFirst({
+      where: { kind: { in: ["open_workspace", "private_office"] }, departments: { none: { status: { not: "archived" } } } },
+      orderBy: { key: "asc" },
     });
-    return created.id;
+    const fallback =
+      preferred ??
+      (await tx.officeZone.findFirst({
+        where: { departments: { none: { status: { not: "archived" } } } },
+        orderBy: { key: "asc" },
+      }));
+    officeZoneId = fallback?.id;
   }
 
-  if (!relatedEntityId) throw new MaterializeError("target_not_found", "relatedEntityId 누락");
-  const current = await tx.department.findUnique({ where: { id: relatedEntityId } });
-  if (!current) throw new MaterializeError("target_not_found", "부서를 찾을 수 없습니다");
-  assertVersion(current.version, entityVersion);
-
-  if (action === "update") {
-    await tx.department.update({
-      where: { id: current.id },
-      data: { ...payload, version: { increment: 1 } },
-    });
-  } else if (action === "archive") {
-    await tx.department.update({
-      where: { id: current.id },
-      data: { status: "archived", archivedAt: new Date(), version: { increment: 1 } },
-    });
-  }
-  return current.id;
-}
-
-async function materializeEmployee(
-  tx: TxClient,
-  action: string,
-  relatedEntityId: string | null,
-  entityVersion: number | null,
-  payload: Payload
-) {
-  if (action === "create") {
-    const { skillIds, ...data } = payload;
-    const created = await tx.employee.create({ data });
-    if (skillIds?.length) {
-      await tx.employeeSkill.createMany({
-        data: skillIds.map((skillId: string) => ({ employeeId: created.id, skillId })),
-      });
-    }
-    return created.id;
-  }
-
-  if (!relatedEntityId) throw new MaterializeError("target_not_found", "relatedEntityId 누락");
-  const current = await tx.employee.findUnique({ where: { id: relatedEntityId } });
-  if (!current) throw new MaterializeError("target_not_found", "직원을 찾을 수 없습니다");
-  assertVersion(current.version, entityVersion);
-
-  if (action === "update") {
-    const { skillIds, ...data } = payload;
-    await tx.employee.update({
-      where: { id: current.id },
-      data: { ...data, version: { increment: 1 } },
-    });
-    if (skillIds) {
-      await tx.employeeSkill.deleteMany({ where: { employeeId: current.id } });
-      if (skillIds.length) {
-        await tx.employeeSkill.createMany({
-          data: skillIds.map((skillId: string) => ({ employeeId: current.id, skillId })),
-        });
-      }
-    }
-  } else if (action === "move") {
-    await tx.employee.update({
-      where: { id: current.id },
-      data: {
-        officeZoneId: payload.officeZoneId,
-        posX: payload.posX,
-        posY: payload.posY,
-        direction: payload.direction ?? current.direction,
-        version: { increment: 1 },
-      },
-    });
-  } else if (action === "archive") {
-    await tx.employee.update({
-      where: { id: current.id },
-      data: { status: "archived", archivedAt: new Date(), version: { increment: 1 } },
-    });
-  }
-  return current.id;
-}
-
-async function materializeTask(
-  tx: TxClient,
-  action: string,
-  relatedEntityId: string | null,
-  entityVersion: number | null,
-  payload: Payload
-) {
-  if (action === "create") {
-    const created = await tx.task.create({
-      data: {
-        ...payload,
-        status: "queued",
-        approvedAt: new Date(),
-      },
-    });
-    return created.id;
-  }
-
-  if (!relatedEntityId) throw new MaterializeError("target_not_found", "relatedEntityId 누락");
-  const current = await tx.task.findUnique({ where: { id: relatedEntityId } });
-  if (!current) throw new MaterializeError("target_not_found", "업무를 찾을 수 없습니다");
-  assertVersion(current.version, entityVersion);
-
-  if (action === "update") {
-    await tx.task.update({
-      where: { id: current.id },
-      data: { ...payload, version: { increment: 1 } },
-    });
-  } else if (action === "assign") {
-    await tx.task.update({
-      where: { id: current.id },
-      data: { assignedEmployeeId: payload.assignedEmployeeId, version: { increment: 1 } },
-    });
-  } else if (action === "archive") {
-    if (!canProposeArchive(current.status as TaskStatus)) {
-      throw new MaterializeError(
-        "invalid_state",
-        `현재 상태(${current.status})에서는 보관할 수 없습니다`
-      );
-    }
-    await tx.task.update({
-      where: { id: current.id },
-      data: { status: "archived", version: { increment: 1 } },
-    });
-  }
-  return current.id;
-}
-
-async function materializeAutomation(
-  tx: TxClient,
-  action: string,
-  relatedEntityId: string | null,
-  entityVersion: number | null,
-  payload: Payload
-) {
-  if (action === "create") {
-    const created = await tx.automation.create({ data: payload });
-    return created.id;
-  }
-
-  if (!relatedEntityId) throw new MaterializeError("target_not_found", "relatedEntityId 누락");
-  const current = await tx.automation.findUnique({ where: { id: relatedEntityId } });
-  if (!current) throw new MaterializeError("target_not_found", "자동화를 찾을 수 없습니다");
-  assertVersion(current.version, entityVersion);
-
-  await tx.automation.update({
-    where: { id: current.id },
-    data: { ...payload, version: { increment: 1 } },
+  const created = await tx.department.create({
+    data: {
+      name: payload.name,
+      description: payload.description,
+      colorTag: payload.colorTag,
+      officeZoneId,
+    },
   });
-  return current.id;
+
+  if (officeZoneId) {
+    await tx.officeZone.update({ where: { id: officeZoneId }, data: { displayName: created.name } });
+  }
+
+  return created.id;
 }
 
-async function materializeSkill(
-  tx: TxClient,
-  action: string,
-  relatedEntityId: string | null,
-  entityVersion: number | null,
-  payload: Payload
-) {
-  if (action === "install_request") {
-    if (relatedEntityId) {
-      const current = await tx.skill.findUnique({ where: { id: relatedEntityId } });
-      if (!current) throw new MaterializeError("target_not_found", "스킬을 찾을 수 없습니다");
-      assertVersion(current.version, entityVersion);
-      const healthStatus = current.connectionType === "none" ? "connected" : "configuration_required";
-      await tx.skill.update({
-        where: { id: current.id },
-        data: { installed: true, enabled: true, healthStatus, version: { increment: 1 } },
-      });
-      return current.id;
-    }
-    const healthStatus = payload.connectionType === "none" ? "connected" : "configuration_required";
-    const created = await tx.skill.create({
-      data: {
-        ...payload,
-        inputSchema: {},
-        outputSchema: {},
-        installed: true,
-        enabled: true,
-        healthStatus,
-      },
-    });
-    return created.id;
+/** create-only now — employee update/move/archive/rank-change are direct
+ * MCP tools / user-direct-control. Auto-assigns a free Seat in the target
+ * zone when available and snaps posX/posY to it so the character renders
+ * aligned to a desk; falls back to the proposed posX/posY if the zone is
+ * at capacity. */
+async function materializeEmployeeCreate(tx: TxClient, payload: Payload): Promise<string> {
+  const {
+    skillIds,
+    requestedByEmployeeId: _requestedByEmployeeId,
+    requestedByRank: _requestedByRank,
+    responsibilities: _responsibilities,
+    reason: _reason,
+    expectedTasks: _expectedTasks,
+    dataAccessScope: _dataAccessScope,
+    requiredSkillNames: _requiredSkillNames,
+    consequencesIfNotHired: _consequencesIfNotHired,
+    duplicateCheckNotes: _duplicateCheckNotes,
+    ...employeeData
+  } = payload;
+
+  const freeSeat = await tx.seat.findFirst({
+    where: { officeZoneId: employeeData.officeZoneId, employeeId: null },
+    orderBy: { index: "asc" },
+  });
+
+  const created = await tx.employee.create({
+    data: {
+      ...employeeData,
+      posX: freeSeat ? freeSeat.normX : employeeData.posX,
+      posY: freeSeat ? freeSeat.normY : employeeData.posY,
+    },
+  });
+
+  if (freeSeat) {
+    await tx.seat.update({ where: { id: freeSeat.id }, data: { employeeId: created.id } });
   }
 
-  if (!relatedEntityId) throw new MaterializeError("target_not_found", "relatedEntityId 누락");
-  const current = await tx.skill.findUnique({ where: { id: relatedEntityId } });
-  if (!current) throw new MaterializeError("target_not_found", "스킬을 찾을 수 없습니다");
-  assertVersion(current.version, entityVersion);
-
-  if (action === "update") {
-    await tx.skill.update({
-      where: { id: current.id },
-      data: { ...payload, version: { increment: 1 } },
-    });
-  } else if (action === "disable") {
-    await tx.skill.update({
-      where: { id: current.id },
-      data: { enabled: false, healthStatus: "disabled", version: { increment: 1 } },
+  if (skillIds?.length) {
+    await tx.employeeSkill.createMany({
+      data: skillIds.map((skillId: string) => ({ employeeId: created.id, skillId })),
     });
   }
-  return current.id;
-}
 
-async function materializeIntegration(
-  tx: TxClient,
-  action: string,
-  relatedEntityId: string | null,
-  entityVersion: number | null,
-  payload: Payload
-) {
-  if (action === "configure") {
-    const created = await tx.integration.create({
-      data: {
-        name: payload.name,
-        kind: payload.kind,
-        config: payload.config,
-        status: "configured",
-        accessMode: "read_only",
-      },
-    });
-    return created.id;
-  }
-
-  if (!relatedEntityId) throw new MaterializeError("target_not_found", "relatedEntityId 누락");
-  const current = await tx.integration.findUnique({ where: { id: relatedEntityId } });
-  if (!current) throw new MaterializeError("target_not_found", "연동을 찾을 수 없습니다");
-  assertVersion(current.version, entityVersion);
-
-  if (action === "update") {
-    await tx.integration.update({
-      where: { id: current.id },
-      data: { ...payload, version: { increment: 1 } },
-    });
-  } else if (action === "disable") {
-    await tx.integration.update({
-      where: { id: current.id },
-      data: { status: "not_configured", version: { increment: 1 } },
-    });
-  }
-  return current.id;
+  return created.id;
 }

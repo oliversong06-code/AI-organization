@@ -60,10 +60,14 @@ describe("MCP server (spawned process, test.db only)", () => {
       "archive_task",
       "pause_automation",
       "archive_automation",
-      "update_employee",
       "archive_employee",
-      "update_department",
       "archive_department",
+      // Phase 2: task/automation/skill/integration no longer go through an
+      // approval proposal at all.
+      "propose_task",
+      "propose_automation",
+      "propose_skill",
+      "propose_integration",
     ];
     for (const name of forbidden) {
       expect(names).not.toContain(name);
@@ -81,7 +85,6 @@ describe("MCP server (spawned process, test.db only)", () => {
         "propose_employee",
         "list_tasks",
         "get_task",
-        "propose_task",
         "start_task",
         "add_task_log",
         "mark_task_needs_review",
@@ -92,11 +95,12 @@ describe("MCP server (spawned process, test.db only)", () => {
         "get_artifact",
         "list_automations",
         "get_automation",
-        "propose_automation",
+        "create_automation",
+        "update_automation",
         "list_skills",
-        "propose_skill",
         "list_integrations",
-        "propose_integration",
+        "configure_integration",
+        "update_integration",
         "create_approval_request",
         "get_approval_status",
       ])
@@ -115,7 +119,6 @@ describe("MCP server (spawned process, test.db only)", () => {
     const result = await client.callTool({
       name: "propose_department",
       arguments: {
-        action: "create",
         payload: { name: "MCP 테스트 부서" },
         summary: "MCP 테스트로 생성한 부서 제안",
       },

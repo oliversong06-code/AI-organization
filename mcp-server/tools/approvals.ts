@@ -9,7 +9,9 @@ import { ok, err } from "../lib/toolResult";
  * approve, reject, and cancel_approval_request tools do not exist here on
  * purpose — approving/rejecting/cancelling a proposal is only ever
  * possible from the web app (a human clicking a button), never from
- * Claude Code. This file only lets Claude create and poll proposals.
+ * Claude Code. This file only lets Claude create and poll proposals, and
+ * only for the two things Phase 2 still requires approval for: creating a
+ * department or an employee.
  */
 export function registerApprovalTools(server: McpServer) {
   server.registerTool(
@@ -17,23 +19,21 @@ export function registerApprovalTools(server: McpServer) {
     {
       title: "범용 승인 요청 생성",
       description:
-        "entityType/action을 직접 지정해 승인 요청을 생성하는 범용 도구입니다. 승인 실행 화이트리스트(department/employee/task/automation/skill/integration의 등록된 action)에 없는 조합은 승인되어도 실제로 반영되지 않습니다. 가능하면 propose_* 전용 도구를 사용하세요.",
+        "entityType/action을 직접 지정해 승인 요청을 생성하는 범용 도구입니다. 승인 실행 화이트리스트(department.create, employee.create만 등록됨)에 없는 조합은 승인되어도 실제로 반영되지 않습니다. 가능하면 propose_department/propose_employee 전용 도구를 사용하세요.",
       inputSchema: {
         entityType: approvalEntityTypeSchema,
         action: z.string().min(1),
         payload: z.record(z.string(), z.unknown()),
-        relatedEntityId: z.string().optional(),
         summary: z.string().min(1),
         riskLevel: approvalRiskLevelSchema.optional(),
         idempotencyKey: z.string().optional(),
       },
     },
-    async ({ entityType, action, payload, relatedEntityId, summary, riskLevel, idempotencyKey }) => {
+    async ({ entityType, action, payload, summary, riskLevel, idempotencyKey }) => {
       const result = await createProposal({
         entityType,
         action,
         payload,
-        relatedEntityId,
         summary,
         riskLevel,
         idempotencyKey,

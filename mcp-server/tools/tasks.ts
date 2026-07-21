@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { prisma } from "../../src/lib/prisma";
-import { createProposal } from "../../src/lib/approvals/propose";
 import {
   addTaskLog,
   completeTask,
@@ -10,7 +9,6 @@ import {
   startTask,
 } from "../../src/lib/execution/taskExecution";
 import { ok, err } from "../lib/toolResult";
-import { proposeToolShape } from "../lib/proposeToolShape";
 
 const ERROR_CODE = { not_found: "not_found", invalid_state: "invalid_state" } as const;
 
@@ -45,29 +43,6 @@ export function registerTaskTools(server: McpServer) {
       });
       if (!task) return err("업무를 찾을 수 없습니다", "not_found");
       return ok({ task });
-    }
-  );
-
-  server.registerTool(
-    "propose_task",
-    {
-      title: "업무 생성/수정/배정/보관 제안",
-      description:
-        "업무 생성·수정·담당자 배정·보관을 제안합니다. create가 승인되면 업무는 즉시 'queued' 상태로 생성되어 start_task로 실행할 수 있습니다. archive는 completed/failed/cancelled 상태에서만 승인 가능합니다.",
-      inputSchema: proposeToolShape(["create", "update", "assign", "archive"]),
-    },
-    async ({ action, payload, relatedEntityId, summary, riskLevel, idempotencyKey }) => {
-      const result = await createProposal({
-        entityType: "task",
-        action,
-        payload,
-        relatedEntityId,
-        summary,
-        riskLevel,
-        idempotencyKey,
-      });
-      if (!result.ok) return err(result.error, result.code);
-      return ok(result);
     }
   );
 
