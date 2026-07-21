@@ -158,3 +158,21 @@ integration:{ configure, update, disable }
 - 2026-07-21: 15단계 완료 — 로컬 MCP 서버(stdio 전용, 포트 미개방) 28개 도구 구현: `src/lib/approvals/propose.ts`(모든 propose_* 및 create_approval_request가 공유하는 단일 진실 소스 — 화이트리스트 재검증·entityVersion 스냅샷·idempotencyKey 중복 방지 P2002 처리), `src/lib/approvals/status.ts`(get_approval_status의 만료 검사, 3곳 중 마지막), `src/lib/execution/taskExecution.ts`(taskTransitions 재사용한 실행 전용 도구). `mcp-server/index.ts` + `tools/*.ts` 9개 파일. **`@modelcontextprotocol/sdk`의 Client로 실제 서버 프로세스를 spawn해 test.db로 접속하는 e2e 테스트**(`mcp-server/mcp-server.test.ts`) 작성 — 도구 28개 정확히 노출, 금지 도구(approve/reject/cancel/update_task_status/pause_task 등) 전부 부재, propose_department가 실제 Department를 만들지 않고 ApprovalRequest만 생성, 미등록 action 거부까지 확인. StdioClientTransport가 부모 프로세스 env를 자동 상속하지 않는다는 점을 발견해 DATABASE_URL을 명시적으로 전달; JSDoc 주석 안의 `*/` 문자열이 주석을 조기 종료시키는 문법 함정 발견해 수정; `server-only` 패키지가 순수 Node 테스트 환경에서 즉시 throw하는 문제를 vitest alias 스텁으로 해결. 이전 세션의 실패한 테스트 실행들이 test.db에 남긴 잔여 행(부서 3, 승인 5)도 이번에 정리. 최종 테스트 36개 전부 통과, dev.db department/approvalRequest 모두 0 확인.
 - 2026-07-21: 16단계 완료 — `.mcp.json` 작성(`npx tsx mcp-server/index.ts`, `DATABASE_URL=file:./prisma/dev.db`). Next 서버 `127.0.0.1` 바인딩은 1단계에서 이미 적용됨. `npx tsx mcp-server/index.ts < /dev/null`로 정상 기동/종료 확인(exit 0), 이후 dev.db 전 카운트(직원/부서/업무/자동화/결과물/승인) 0 재확인. **이 세션은 OneDrive 경로에서 시작되어 `.mcp.json`을 자동 인식하지 못한다 — 실제 도구 인식 확인은 `C:\dev\claude-office-app`에서 새 Claude Code 세션을 열어야 가능**(§0에서 예고한 재시작 필요 시점).
 - 2026-07-21: 17단계 완료 — `.claude/skills/company-manager/SKILL.md` 작성: 승인 우회 불가·approve/reject/cancel 도구 부재·사용자 전용 일시정지/취소/보관·완료 거짓 보고 금지를 절대 원칙으로 명시, 요청 분류→제안 전 확인→승인된 업무 실행(start_task~fail_task)→파일 접근 범위→스킬 승인 절차→영구 삭제 금지→활동 로그 자동 기록 순으로 실제 구현된 28개 도구 이름과 정확히 매칭되게 작성.
+- 2026-07-21: 18단계 완료(최종) — `path-guard.test.ts`(workspace/외부 경로 traversal 공격 문자열 다수 차단 확인), `taskExecution.test.ts`(MCP 실행 전용 전이 6종) 추가. `README.md`를 프로젝트 실제 구조로 재작성, `scripts/start-windows.ps1`(node_modules/dev.db 존재 여부로 최초 실행과 재실행 구분, 기존 데이터 보존, OneDrive 경로 경고 포함, PowerShell 파서로 문법 검증). `npm run build` 프로덕션 빌드 성공(모든 라우트 정상 생성) 확인. 최종 테스트 53개 전부 통과, 11개 화면 전부 200 확인, dev.db 최종 상태: company=1·officeZone=6·appSetting=3·skill=6(전부 미설치), employee/department/task/automation/artifact/approvalRequest/integration/activityLog 전부 0.
+
+## 완료 조건 체크 (§21 기준)
+
+1. ✅ 사람 없는 사무실 렌더링(6단계)
+2. ✅ 초기 직원 0명 / 3. ✅ 부서 0개 / 4. ✅ 업무 0개 / 5. ✅ 자동화 0개 / 6. ✅ 결과물 0개
+7. ✅ 샘플 데이터 없음(seed.ts가 zero-state를 코드로 강제)
+8. ✅ AI API 키 없이 실행(Anthropic/OpenAI SDK 미사용)
+9. ✅ MCP를 통한 제안 등록 가능(28개 도구, e2e 검증됨)
+10. ✅ 승인 전 실제 데이터 미생성(materialize.ts, 16개 테스트로 검증)
+11. ✅ 승인된 직원만 사무실 표시(LiveEmployeeLayer가 실제 DB만 조회)
+12. ✅ 결과물 등록 시 말풍선/공용 알림(ArtifactBubble, /artifacts 공용 탭)
+13. ✅ manifest 중복 없이 가져오기(ImportedManifest.runId 유니크, 4개 테스트)
+14. ✅ 자동화 기능 존재·데이터는 비어 있음
+15. ✅ 모든 중요 변경이 ActivityLog에 기록(withTransaction+logActivity로 강제)
+
+프로젝트 완성. 새 경로(`C:\dev\claude-office-app`)에서 Claude Code 세션을 열면 `.mcp.json`과
+`company-manager` 스킬이 인식되어 실제 사용을 시작할 수 있다.
