@@ -6,6 +6,8 @@ export interface OfficeZoneListItem {
   key: string;
   name: string;
   kind: string;
+  displayName: string | null;
+  defaultDisplayName: string;
   departments: Array<{ id: string; name: string }>;
 }
 

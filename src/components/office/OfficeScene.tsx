@@ -5,6 +5,7 @@ import {
 } from "@/lib/office-scene";
 import { isoProject, type OfficeScene as OfficeSceneData } from "@/lib/office-scene-geometry";
 import { LiveEmployeeLayer } from "./LiveEmployeeLayer";
+import { ZoneLabelLayer } from "./ZoneLabelLayer";
 
 /** Invisible clickable regions over each room, one per OfficeZone, so the
  * (currently) client-side interaction layer can pick up a click via
@@ -68,6 +69,7 @@ export async function OfficeScene() {
         <defs dangerouslySetInnerHTML={{ __html: avatarSymbols }} />
         <g dangerouslySetInnerHTML={{ __html: backgroundInner }} />
         <ZoneHitRegions scene={scene} />
+        <ZoneLabelLayer scene={scene} />
         <LiveEmployeeLayer scene={scene} />
       </svg>
     </div>

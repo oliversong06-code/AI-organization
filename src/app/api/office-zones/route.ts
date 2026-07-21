@@ -8,6 +8,8 @@ export async function GET() {
       key: true,
       name: true,
       kind: true,
+      displayName: true,
+      defaultDisplayName: true,
       departments: {
         where: { status: { not: "archived" } },
         select: { id: true, name: true },
