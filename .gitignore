@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+
+# next.js build output
+.next/
+out/
+
+# env files
+.env
+.env.*
+!.env.example
+
+# prisma sqlite databases (dev + test, all WAL/SHM sidecar files)
+prisma/dev.db
+prisma/dev.db-journal
+prisma/dev.db-wal
+prisma/dev.db-shm
+prisma/test.db
+prisma/test.db-journal
+prisma/test.db-wal
+prisma/test.db-shm
+
+# workspace artifacts and local-only results (never committed)
+workspace/
+
+# misc
+*.log
+.DS_Store
+Thumbs.db
