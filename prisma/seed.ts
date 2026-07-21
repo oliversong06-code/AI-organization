@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
+import { Prisma } from "../src/generated/prisma/client";
 
 /**
  * Seeds ONLY what the plan allows as initial data: one Company row, the
@@ -168,7 +169,10 @@ async function main() {
     await prisma.appSetting.upsert({
       where: { key: setting.key },
       update: {},
-      create: { key: setting.key, value: setting.value },
+      create: {
+        key: setting.key,
+        value: setting.value === null ? Prisma.JsonNull : (setting.value as Prisma.InputJsonValue),
+      },
     });
   }
   console.log(`Ensured ${APP_SETTINGS.length} AppSetting rows`);

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <!--
+    Shared humanoid avatar sprite for employee markers. Deliberately
+    abstract/rounded (a friendly token, not a realistic figure). The body
+    and arms use fill="currentColor" so consumers can recolor per
+    avatarId via the `color` CSS property on the <use> element; only the
+    head stays a fixed neutral tone.
+  -->
+  <symbol id="avatar-body" viewBox="0 0 100 132">
+    <ellipse cx="50" cy="123" rx="24" ry="6" fill="#000000" opacity="0.14"/>
+    <path d="M30 128 L30 78 Q30 56 50 56 Q70 56 70 78 L70 128 Z" fill="currentColor"/>
+    <rect x="16" y="72" width="14" height="34" rx="7" fill="currentColor" opacity="0.85"/>
+    <rect x="70" y="72" width="14" height="34" rx="7" fill="currentColor" opacity="0.85"/>
+    <circle cx="50" cy="34" r="24" fill="#F1C9A0"/>
+    <circle cx="42" cy="33" r="2.6" fill="#4A3B32"/>
+    <circle cx="58" cy="33" r="2.6" fill="#4A3B32"/>
+  </symbol>
+</svg>

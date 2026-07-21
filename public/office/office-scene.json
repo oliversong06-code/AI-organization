@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "viewBoxWidth": 1600,
+  "viewBoxHeight": 1000,
+  "iso": {
+    "originX": 800,
+    "originY": 130,
+    "isoW": 1300,
+    "isoH": 650
+  },
+  "zones": [
+    {
+      "key": "open-workspace-1",
+      "kind": "open_workspace",
+      "rect": { "x0": 0.05, "y0": 0.08, "x1": 0.38, "y1": 0.46 }
+    },
+    {
+      "key": "open-workspace-2",
+      "kind": "open_workspace",
+      "rect": { "x0": 0.05, "y0": 0.52, "x1": 0.38, "y1": 0.92 }
+    },
+    {
+      "key": "private-office-1",
+      "kind": "private_office",
+      "rect": { "x0": 0.42, "y0": 0.08, "x1": 0.62, "y1": 0.4 }
+    },
+    {
+      "key": "meeting-room-1",
+      "kind": "meeting_room",
+      "rect": { "x0": 0.42, "y0": 0.46, "x1": 0.62, "y1": 0.78 }
+    },
+    {
+      "key": "lounge-1",
+      "kind": "lounge",
+      "rect": { "x0": 0.42, "y0": 0.82, "x1": 0.62, "y1": 0.95 }
+    },
+    {
+      "key": "artifact-area-1",
+      "kind": "artifact_area",
+      "rect": { "x0": 0.66, "y0": 0.08, "x1": 0.95, "y1": 0.92 }
+    }
+  ]
+}
