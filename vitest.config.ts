@@ -1,8 +1,16 @@
+import path from "node:path";
 import { defineConfig } from "vitest/config";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   plugins: [tsconfigPaths()],
+  resolve: {
+    alias: {
+      // "server-only" throws when imported outside Next's build pipeline —
+      // meaningless (and test-breaking) under plain Node/vitest.
+      "server-only": path.resolve(__dirname, "scripts/server-only-stub.ts"),
+    },
+  },
   test: {
     environment: "node",
     globalSetup: ["./scripts/check-db-target.ts"],
