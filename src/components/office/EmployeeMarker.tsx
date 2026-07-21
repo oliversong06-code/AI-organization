@@ -8,6 +8,7 @@ import {
 } from "@/lib/office-scene-geometry";
 import { avatarColor } from "./avatar-palette";
 import { StatusBadge } from "./StatusBadge";
+import { ArtifactBubble } from "./ArtifactBubble";
 import type { EmployeeMarkerData } from "./types";
 
 interface Props {
@@ -45,6 +46,7 @@ export function EmployeeMarker({ employee, zone, iso, onSelect }: Props) {
             style={{ color: avatarColor(employee.avatarId) }}
           />
           <StatusBadge status={employee.status} />
+          {employee.latestArtifactId && <ArtifactBubble artifactId={employee.latestArtifactId} />}
         </g>
       </g>
       <text

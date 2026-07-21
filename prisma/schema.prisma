@@ -188,6 +188,7 @@ model Artifact {
   metadata         Json?
   taskLinks        TaskArtifact[]
   createdAt        DateTime       @default(now())
+  archivedAt       DateTime?
 }
 
 model TaskArtifact {
