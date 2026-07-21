@@ -313,3 +313,5 @@ P2-14 종합 테스트 + 프로덕션 빌드 + 최종 보고
 
 ## Phase 2 진행 로그
 
+- 2026-07-22: P2-1 완료 — 추가 전용 마이그레이션(`phase2_rank_review_worker_dataasset`) 적용. **적용 중 dev.db가 사용자의 다른 실행 중인 세션(포트 3000 dev 서버 + MCP 서버 프로세스 3개)에 잠겨 `database is locked` 발생 → 사용자 승인 받고 해당 프로세스만 종료(무관한 `./mcp/server.mjs`는 유지) 후 재시도해 해결**. 신규: Employee.rank(기본1), OfficeZone.displayName/defaultDisplayName, Seat, ExecutionJob, Artifact.departmentId/importance/currentReviewStatus/legacy, ArtifactVersion, ArtifactDepartment, ReviewPolicy, ReviewDecision, Skill 확장 필드, DataAsset+연결모델 4종. `scripts/migrate-policy-v2.ts`(재실행 가능한 백필, prisma/seed.ts와 별개)로 zone별 미배정 라벨 1~6 부여(open-workspace-1만 "리서치·보고서팀" 유지), 좌석 15개 생성(기존 데스크 좌표 재사용) 후 리오를 좌석1에 배정(posX/posY 스냅), employeeRequestMinRank=3 시딩, ReviewPolicy 4건 시딩, 기존 결과물 legacy=true+ArtifactVersion v1 생성, pending 정책위반 승인 취소(현재 0건, 로직은 검증됨) — **재실행 시 전부 0건으로 idempotent 확인**. dev.db 핵심 데이터(company=1/department=1/employee=1/task=1/artifact=1) 전부 보존 확인.
+

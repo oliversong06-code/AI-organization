@@ -10,12 +10,23 @@ export const employeeStatusSchema = z.enum([
   "running",
   "awaiting_approval",
   "needs_review",
+  "reviewing",
+  "revision_requested",
+  "review_blocked",
   "completed",
   "failed",
   "paused",
   "archived",
 ]);
 export type EmployeeStatus = z.infer<typeof employeeStatusSchema>;
+
+// 1(최하)~4(최상)
+export const employeeRankSchema = z.number().int().min(1).max(4);
+export type EmployeeRank = z.infer<typeof employeeRankSchema>;
+
+// 1(낮음)~4(매우 중요) — Task/Artifact의 검수 강도를 결정
+export const importanceSchema = z.number().int().min(1).max(4);
+export type Importance = z.infer<typeof importanceSchema>;
 
 export const departmentStatusSchema = z.enum(["active", "archived"]);
 export type DepartmentStatus = z.infer<typeof departmentStatusSchema>;
@@ -122,17 +133,18 @@ export type IntegrationStatus = z.infer<typeof integrationStatusSchema>;
 export const integrationAccessModeSchema = z.enum(["read_only", "read_write"]);
 export type IntegrationAccessMode = z.infer<typeof integrationAccessModeSchema>;
 
-export const approvalEntityTypeSchema = z.enum([
-  "department",
-  "employee",
-  "task",
-  "automation",
-  "skill",
-  "integration",
-]);
+// Phase 2: 승인이 필요한 것은 정확히 이 두 가지뿐이다. task/automation/skill/integration
+// 승인 경로는 폐지되었다 — 과거(Phase 1) 이력 행은 그대로 남아 있지만 새로 생성되지 않는다.
+export const approvalEntityTypeSchema = z.enum(["department", "employee"]);
 export type ApprovalEntityType = z.infer<typeof approvalEntityTypeSchema>;
 
-export const approvalStatusSchema = z.enum(["pending", "approved", "rejected", "expired"]);
+export const approvalStatusSchema = z.enum([
+  "pending",
+  "approved",
+  "rejected",
+  "expired",
+  "cancelled_by_policy_change",
+]);
 export type ApprovalStatus = z.infer<typeof approvalStatusSchema>;
 
 export const approvalRiskLevelSchema = z.enum(["standard", "sensitive"]);
@@ -160,3 +172,71 @@ export type OfficeZoneKind = z.infer<typeof officeZoneKindSchema>;
 
 export const directionSchema = z.enum(["up", "down", "left", "right"]);
 export type Direction = z.infer<typeof directionSchema>;
+
+// ─────────────────────────────────────────────────────────
+// Phase 2
+// ─────────────────────────────────────────────────────────
+
+export const executionJobStatusSchema = z.enum([
+  "pending",
+  "claimed",
+  "running",
+  "completed",
+  "failed",
+]);
+export type ExecutionJobStatus = z.infer<typeof executionJobStatusSchema>;
+
+export const reviewStatusSchema = z.enum([
+  "pending",
+  "reviewing",
+  "approved",
+  "revision_requested",
+  "rejected",
+  "blocked",
+]);
+export type ReviewStatus = z.infer<typeof reviewStatusSchema>;
+
+// src/lib/review/reviewChain.ts가 이 값으로 실제 검수 체인을 계산한다.
+export const reviewChainModeSchema = z.enum([
+  "author_plus_one",
+  "sequential_to_rank3",
+  "min3_then_rank4",
+  "full_chain_rank4",
+]);
+export type ReviewChainMode = z.infer<typeof reviewChainModeSchema>;
+
+export const reviewStrictnessSchema = z.enum(["normal", "strict"]);
+export type ReviewStrictness = z.infer<typeof reviewStrictnessSchema>;
+
+export const artifactVersionFormatSchema = z.enum(["markdown", "pdf", "xlsx", "csv", "other"]);
+export type ArtifactVersionFormat = z.infer<typeof artifactVersionFormatSchema>;
+
+export const skillValidationStatusSchema = z.enum([
+  "unvalidated",
+  "validating",
+  "passed",
+  "failed",
+]);
+export type SkillValidationStatus = z.infer<typeof skillValidationStatusSchema>;
+
+export const dataAssetSourceTypeSchema = z.enum([
+  "task_input",
+  "approved_integration",
+  "manual_register",
+]);
+export type DataAssetSourceType = z.infer<typeof dataAssetSourceTypeSchema>;
+
+export const dataAssetSensitivitySchema = z.enum(["public", "internal", "confidential"]);
+export type DataAssetSensitivity = z.infer<typeof dataAssetSensitivitySchema>;
+
+export const dataAssetStatusSchema = z.enum(["active", "archived"]);
+export type DataAssetStatus = z.infer<typeof dataAssetStatusSchema>;
+
+export const dataAccessActionSchema = z.enum(["read", "write", "search", "reuse"]);
+export type DataAccessAction = z.infer<typeof dataAccessActionSchema>;
+
+export const dataAssetTaskRelationSchema = z.enum(["used", "produced"]);
+export type DataAssetTaskRelation = z.infer<typeof dataAssetTaskRelationSchema>;
+
+export const rankAuthorizedBySchema = z.enum(["user", "rank4_employee"]);
+export type RankAuthorizedBy = z.infer<typeof rankAuthorizedBySchema>;
