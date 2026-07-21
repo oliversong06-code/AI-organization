@@ -3,11 +3,39 @@ import {
   loadOfficeBackgroundInnerSvg,
   loadOfficeScene,
 } from "@/lib/office-scene";
-import { EmployeeLayer } from "./EmployeeLayer";
-import type { EmployeeMarkerData } from "./types";
+import { isoProject, type OfficeScene as OfficeSceneData } from "@/lib/office-scene-geometry";
+import { LiveEmployeeLayer } from "./LiveEmployeeLayer";
 
-interface Props {
-  employees: EmployeeMarkerData[];
+/** Invisible clickable regions over each room, one per OfficeZone, so the
+ * (currently) client-side interaction layer can pick up a click via
+ * `data-zone-key` event delegation and open the zone/department panel —
+ * without OfficeScene itself (a Server Component) needing to hold click
+ * handlers. */
+function ZoneHitRegions({ scene }: { scene: OfficeSceneData }) {
+  return (
+    <g data-testid="zone-hit-regions">
+      {scene.zones.map((zone) => {
+        const { x0, y0, x1, y1 } = zone.rect;
+        const points = [
+          isoProject(x0, y0, scene.iso),
+          isoProject(x1, y0, scene.iso),
+          isoProject(x1, y1, scene.iso),
+          isoProject(x0, y1, scene.iso),
+        ]
+          .map(([x, y]) => `${x},${y}`)
+          .join(" ");
+        return (
+          <polygon
+            key={zone.key}
+            data-zone-key={zone.key}
+            points={points}
+            fill="transparent"
+            className="cursor-pointer"
+          />
+        );
+      })}
+    </g>
+  );
 }
 
 /**
@@ -22,7 +50,7 @@ interface Props {
  * cross-file) so EmployeeMarker's <use href="#avatar-body"> is a
  * same-document fragment reference, which works everywhere.
  */
-export async function OfficeScene({ employees }: Props) {
+export async function OfficeScene() {
   const [scene, backgroundInner, avatarSymbols] = await Promise.all([
     loadOfficeScene(),
     loadOfficeBackgroundInnerSvg(),
@@ -39,7 +67,8 @@ export async function OfficeScene({ employees }: Props) {
       >
         <defs dangerouslySetInnerHTML={{ __html: avatarSymbols }} />
         <g dangerouslySetInnerHTML={{ __html: backgroundInner }} />
-        <EmployeeLayer scene={scene} employees={employees} />
+        <ZoneHitRegions scene={scene} />
+        <LiveEmployeeLayer scene={scene} />
       </svg>
     </div>
   );

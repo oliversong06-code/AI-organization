@@ -1,5 +1,6 @@
 import { OfficeScene } from "@/components/office/OfficeScene";
 import { CompanyHeader } from "@/components/office/CompanyHeader";
+import { OfficeSceneInteractionLayer } from "@/components/office/OfficeSceneInteractionLayer";
 
 export default function Home() {
   return (
@@ -7,7 +8,9 @@ export default function Home() {
       <CompanyHeader />
       <main className="flex flex-1 items-center justify-center p-6">
         <div className="w-full max-w-6xl overflow-hidden rounded-xl border bg-white shadow-sm">
-          <OfficeScene employees={[]} />
+          <OfficeSceneInteractionLayer>
+            <OfficeScene />
+          </OfficeSceneInteractionLayer>
         </div>
       </main>
     </div>
