@@ -1,7 +1,6 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// AI 회사 운영 웹앱 — 데이터 모델
+// SQLite는 네이티브 enum을 지원하지 않으므로 상태값은 String으로 저장하고,
+// 허용 값의 단일 진실 소스는 src/lib/enums.ts(zod enum)에 둔다.
 
 generator client {
   provider = "prisma-client"
@@ -10,4 +9,304 @@ generator client {
 
 datasource db {
   provider = "sqlite"
+}
+
+// ─────────────────────────────────────────────────────────
+// 회사 / 사무실 공간
+// ─────────────────────────────────────────────────────────
+
+model Company {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// 물리적 사무실 공간(업무공간/개인오피스/회의실/휴게공간/공용 결과물 공간 등).
+/// 부서나 실제 직원을 의미하지 않는다 — 부서가 나중에 이 공간에 배정될 뿐이다.
+model OfficeZone {
+  id          String       @id @default(cuid())
+  key         String       @unique
+  name        String
+  kind        String
+  rectNormX0  Float
+  rectNormY0  Float
+  rectNormX1  Float
+  rectNormY1  Float
+  departments Department[]
+  employees   Employee[]
+  createdAt   DateTime     @default(now())
+}
+
+// ─────────────────────────────────────────────────────────
+// 부서 / 직원 / 스킬
+// ─────────────────────────────────────────────────────────
+
+model Department {
+  id                String      @id @default(cuid())
+  name              String
+  description       String?
+  colorTag          String?
+  officeZoneId      String?
+  officeZone        OfficeZone? @relation(fields: [officeZoneId], references: [id])
+  status            String      @default("active") // active|archived
+  version           Int         @default(1)
+  employees         Employee[]
+  approvalRequestId String?
+  createdAt         DateTime    @default(now())
+  archivedAt        DateTime?
+}
+
+model Employee {
+  id                String          @id @default(cuid())
+  name              String
+  role              String
+  departmentId      String?
+  department        Department?     @relation(fields: [departmentId], references: [id])
+  status            String          @default("idle") // idle|queued|running|awaiting_approval|needs_review|completed|failed|paused|archived
+  officeZoneId      String
+  officeZone        OfficeZone      @relation(fields: [officeZoneId], references: [id])
+  posX              Float
+  posY              Float
+  direction         String          @default("down") // up|down|left|right
+  scale             Float           @default(1)
+  avatarId          String
+  currentTaskId     String?
+  version           Int             @default(1)
+  skills            EmployeeSkill[]
+  assignedTasks     Task[]          @relation("AssignedTasks")
+  approvalRequestId String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  archivedAt        DateTime?
+}
+
+model Skill {
+  id             String          @id @default(cuid())
+  name           String
+  description    String?
+  category       String
+  source         String          // builtin|mcp|external
+  connectionType String          // none|api_key|oauth_stub|local_tool
+  inputSchema    Json
+  outputSchema   Json
+  permissions    Json            // string[]
+  enabled        Boolean         @default(false)
+  installed      Boolean         @default(false)
+  healthStatus   String          @default("available") // available|installation_required|configuration_required|connected|disabled|error
+  configuration  Json?
+  version        Int             @default(1)
+  employees      EmployeeSkill[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model EmployeeSkill {
+  id         String   @id @default(cuid())
+  employeeId String
+  skillId    String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  skill      Skill    @relation(fields: [skillId], references: [id])
+  addedAt    DateTime @default(now())
+
+  @@unique([employeeId, skillId])
+}
+
+// ─────────────────────────────────────────────────────────
+// 업무
+// ─────────────────────────────────────────────────────────
+
+model Task {
+  id                       String         @id @default(cuid())
+  title                    String
+  description              String
+  assignedEmployeeId       String?
+  assignedEmployee         Employee?      @relation("AssignedTasks", fields: [assignedEmployeeId], references: [id])
+  collaboratingEmployeeIds Json           // string[]
+  status                   String         // queued|running|needs_review|completed|failed|paused|cancelled|archived (draft/awaiting_approval은 실제 행에 존재하지 않는 가상 상태)
+  statusBeforePause        String?        // pause 직전 상태 — resume 시 이 값으로 복귀
+  priority                 String         @default("normal") // low|normal|high|urgent
+  inputFiles               Json           // string[] (workspace-relative)
+  requiredSkills           Json           // string[]
+  requestedPermissions     Json           // string[]
+  progress                 Int            @default(0)
+  resultSummary            String?
+  errorMessage             String?
+  retryable                Boolean        @default(false)
+  approvalRequestId        String?
+  createdAt                DateTime       @default(now())
+  approvedAt               DateTime?
+  startedAt                DateTime?
+  completedAt              DateTime?
+  steps                    TaskStep[]
+  logs                     TaskLog[]
+  artifacts                Artifact[]
+  taskArtifactLinks        TaskArtifact[]
+}
+
+model TaskStep {
+  id          String    @id @default(cuid())
+  taskId      String
+  task        Task      @relation(fields: [taskId], references: [id])
+  stepNumber  Int
+  title       String
+  status      String    // pending|running|completed|failed|skipped
+  output      Json?
+  startedAt   DateTime?
+  completedAt DateTime?
+}
+
+model TaskLog {
+  id         String   @id @default(cuid())
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id])
+  employeeId String?
+  timestamp  DateTime @default(now())
+  level      String   // info|warn|error
+  message    String
+}
+
+// ─────────────────────────────────────────────────────────
+// 결과물
+// ─────────────────────────────────────────────────────────
+
+model Artifact {
+  id               String         @id @default(cuid())
+  taskId           String?
+  task             Task?          @relation(fields: [taskId], references: [id])
+  employeeId       String?
+  title            String
+  summary          String?
+  fileName         String
+  filePath         String         // workspace-relative, path-guard 검증됨
+  mimeType         String
+  size             Int
+  sourceType       String         // task_output|manual_import|external_sync|excel_register
+  externalSourceId String?        // 예: manifest runId
+  metadata         Json?
+  taskLinks        TaskArtifact[]
+  createdAt        DateTime       @default(now())
+}
+
+model TaskArtifact {
+  id         String   @id @default(cuid())
+  taskId     String
+  artifactId String
+  task       Task     @relation(fields: [taskId], references: [id])
+  artifact   Artifact @relation(fields: [artifactId], references: [id])
+  relation   String   @default("referenced") // produced|referenced
+  linkedAt   DateTime @default(now())
+
+  @@unique([taskId, artifactId])
+}
+
+// ─────────────────────────────────────────────────────────
+// 자동화
+// ─────────────────────────────────────────────────────────
+
+model Automation {
+  id                   String          @id @default(cuid())
+  name                 String
+  description          String?
+  taskInstruction      String
+  assignedEmployeeId   String?
+  scheduleType         String          // interval|cron|manual|external
+  scheduleExpression   String?
+  timezone             String?
+  requiredSkills       Json
+  requiredIntegrations Json
+  outputFormat         String          // file|artifact|summary
+  outputLocation       String?
+  approvalMode         String          @default("required") // required|pre_approved
+  enabled              Boolean         @default(true)
+  externalScheduleId   String?
+  lastRunAt            DateTime?
+  nextRunAt            DateTime?
+  lastStatus           String?
+  consecutiveFailures  Int             @default(0)
+  version              Int             @default(1)
+  approvalRequestId    String?
+  createdAt            DateTime        @default(now())
+  archivedAt           DateTime?
+  runs                 AutomationRun[]
+}
+
+model AutomationRun {
+  id           String     @id @default(cuid())
+  automationId String
+  automation   Automation @relation(fields: [automationId], references: [id])
+  runId        String     @unique // ImportedManifest.runId와 상관관계
+  source       String     // local_manual|external_import
+  status       String     // running|completed|failed
+  summary      String?
+  errorMessage String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime   @default(now())
+}
+
+// ─────────────────────────────────────────────────────────
+// 승인 / 연동 / 로그 / 설정
+// ─────────────────────────────────────────────────────────
+
+model ApprovalRequest {
+  id               String    @id @default(cuid())
+  entityType       String    // department|employee|task|automation|skill|integration
+  action           String    // create|update|archive|move|assign|install_request|disable|configure ...
+  relatedEntityId  String?   // update/archive/assign 대상 기존 행
+  payload          Json      // action별 Zod 스키마로 검증된 제안 데이터
+  summary          String
+  riskLevel        String    @default("standard") // standard|sensitive
+  status           String    @default("pending")  // pending|approved|rejected|expired
+  requestedBy      String    @default("claude_code")
+  rejectionReason  String?
+  idempotencyKey   String?   @unique
+  entityVersion    Int?      // update/archive/assign 제안 시 대상의 version 스냅샷
+  expiresAt        DateTime
+  createdAt        DateTime  @default(now())
+  resolvedAt       DateTime?
+  resolvedBy       String?
+}
+
+model Integration {
+  id            String    @id @default(cuid())
+  name          String
+  kind          String    // local_folder|google_drive_sync|git_repo|excel_watch|generic
+  config        Json      // 예: { syncFolderPath }
+  status        String    @default("not_configured") // not_configured|configured|error
+  accessMode    String    @default("read_only") // read_only|read_write(workspace 루트에만 해당)
+  version       Int       @default(1)
+  lastCheckedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model ActivityLog {
+  id                String   @id @default(cuid())
+  timestamp         DateTime @default(now())
+  actor             String   // claude_code|user|system
+  action            String   // 예: "employee.propose", "approval.approve", "task.pause"
+  entityType        String?
+  entityId          String?
+  detail            Json?
+  approvalRequestId String?
+}
+
+model AppSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model ImportedManifest {
+  id                 String   @id @default(cuid())
+  runId              String   @unique
+  automationId       String?
+  sourceFilePath     String
+  rawPayload         Json
+  status             String   // imported|skipped_duplicate|invalid
+  createdArtifactIds Json     // string[]
+  importedAt         DateTime @default(now())
 }
