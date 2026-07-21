@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { approveApprovalRequest, rejectApprovalRequest } from "./materialize";
 

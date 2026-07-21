@@ -6,6 +6,9 @@ import { useTask } from "@/lib/hooks/useTasks";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft } from "lucide-react";
+import { TaskControlButtons } from "@/components/tasks/TaskControlButtons";
+import type { TaskStatus } from "@/lib/enums";
+import { mutate as globalMutate } from "swr";
 
 export default function TaskDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -32,6 +35,13 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Badge variant="secondary">{task.status}</Badge>
                   <Badge variant="outline">{task.priority}</Badge>
+                  <div className="ml-auto">
+                    <TaskControlButtons
+                      taskId={task.id}
+                      status={task.status as TaskStatus}
+                      onDone={() => globalMutate(`/api/tasks/${task.id}`)}
+                    />
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-zinc-700">
