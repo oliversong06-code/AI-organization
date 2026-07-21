@@ -10,12 +10,17 @@ import {
 } from "../../src/lib/execution/taskExecution";
 import { createTask, updateTask, assignTask } from "../../src/lib/direct/taskDirect";
 import { taskCreateSchema, taskUpdateSchema, taskAssignSchema } from "../../src/lib/zod-schemas/direct-task";
+import { completeTaskWithDocument } from "../../src/lib/execution/completeTaskWithDocument";
+import { importanceSchema } from "../../src/lib/enums";
 import { ok, err } from "../lib/toolResult";
 
 const ERROR_CODE = {
   not_found: "not_found",
   invalid_state: "invalid_state",
   invalid_employee: "invalid_employee",
+  pdf_generation_failed: "pdf_generation_failed",
+  invalid_path: "invalid_path",
+  file_not_found: "file_not_found",
 } as const;
 
 export function registerTaskTools(server: McpServer) {
@@ -171,6 +176,47 @@ export function registerTaskTools(server: McpServer) {
     },
     async ({ id, assignedEmployeeId }) => {
       const result = await assignTask(id, assignedEmployeeId, "claude_code");
+      if (!result.ok) return err(result.error, ERROR_CODE[result.code]);
+      return ok(result);
+    }
+  );
+
+  server.registerTool(
+    "complete_task_with_document",
+    {
+      title: "문서 결과물과 함께 업무 완료",
+      description:
+        "사람이 읽는 문서형 결과물이 있는 업무를 완료 처리합니다. markdown 내용(또는 표 요약)으로 한글 폰트가 포함된 PDF를 생성해 workspace에 저장하고 결과물로 등록한 뒤에만 업무를 completed로 전환합니다 — PDF 생성이나 등록에 실패하면 업무 상태는 전혀 바뀌지 않습니다(completed로 거짓 보고하지 않음). CSV/XLSX가 원본인 경우 원본 파일은 별도로 유지하고 이 도구는 표 요약 PDF만 만듭니다(content.kind='table_summary').",
+      inputSchema: {
+        taskId: z.string().min(1),
+        title: z.string().min(1),
+        pdfFilePath: z.string().min(1).describe("workspace 상대 경로, 예: workspace/artifacts/report.pdf"),
+        content: z.union([
+          z.object({ kind: z.literal("markdown"), markdown: z.string().min(1) }),
+          z.object({
+            kind: z.literal("table_summary"),
+            header: z.array(z.string()),
+            rows: z.array(z.array(z.string())),
+            note: z.string().optional(),
+          }),
+        ]),
+        employeeId: z.string().optional(),
+        departmentId: z.string().optional(),
+        importance: importanceSchema.optional(),
+        resultSummary: z.string().optional(),
+      },
+    },
+    async ({ taskId, title, pdfFilePath, content, employeeId, departmentId, importance, resultSummary }) => {
+      const result = await completeTaskWithDocument({
+        taskId,
+        title,
+        pdfFilePath,
+        content,
+        employeeId,
+        departmentId,
+        importance,
+        resultSummary,
+      });
       if (!result.ok) return err(result.error, ERROR_CODE[result.code]);
       return ok(result);
     }

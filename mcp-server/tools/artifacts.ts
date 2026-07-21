@@ -3,35 +3,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { prisma } from "../../src/lib/prisma";
-import { withTransaction } from "../../src/lib/withTransaction";
-import { logActivity } from "../../src/lib/activity-log";
 import { resolveWorkspacePath, PathTraversalError } from "../../src/lib/path-guard";
-import { startReviewForVersion, submitReviewDecision, createRevisionVersion } from "../../src/lib/review/reviewWorkflow";
+import { submitReviewDecision, createRevisionVersion } from "../../src/lib/review/reviewWorkflow";
+import { registerArtifactDirect, inferMimeType, inferFormat } from "../../src/lib/artifacts/registerArtifact";
 import { importanceSchema } from "../../src/lib/enums";
 import { ok, err } from "../lib/toolResult";
-
-const MIME_BY_EXT: Record<string, string> = {
-  ".md": "text/markdown",
-  ".txt": "text/plain",
-  ".json": "application/json",
-  ".csv": "text/csv",
-  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  ".pdf": "application/pdf",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-};
-
-const FORMAT_BY_EXT: Record<string, string> = {
-  ".md": "markdown",
-  ".pdf": "pdf",
-  ".xlsx": "xlsx",
-  ".csv": "csv",
-};
-
-function inferFormat(fileName: string): string {
-  return FORMAT_BY_EXT[path.extname(fileName).toLowerCase()] ?? "other";
-}
 
 export function registerArtifactTools(server: McpServer) {
   server.registerTool(
@@ -52,78 +28,18 @@ export function registerArtifactTools(server: McpServer) {
       },
     },
     async ({ taskId, employeeId, departmentId, title, summary, filePath, sourceType, importance }) => {
-      let absolutePath: string;
-      try {
-        absolutePath = resolveWorkspacePath(filePath);
-      } catch (e) {
-        if (e instanceof PathTraversalError) return err(e.message, "invalid_path");
-        throw e;
-      }
-
-      const stat = await fs.stat(absolutePath).catch(() => null);
-      if (!stat || !stat.isFile()) {
-        return err(`파일을 찾을 수 없습니다: ${filePath}`, "file_not_found");
-      }
-
-      const fileName = path.basename(filePath);
-      const mimeType = MIME_BY_EXT[path.extname(fileName).toLowerCase()] ?? "application/octet-stream";
-      const format = inferFormat(fileName);
-
-      let resolvedDepartmentId = departmentId ?? null;
-      if (!resolvedDepartmentId && employeeId) {
-        const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
-        resolvedDepartmentId = employee?.departmentId ?? null;
-      }
-
-      const artifact = await withTransaction(async (tx) => {
-        const created = await tx.artifact.create({
-          data: {
-            taskId,
-            employeeId,
-            departmentId: resolvedDepartmentId,
-            title,
-            summary,
-            fileName,
-            filePath,
-            mimeType,
-            size: stat.size,
-            sourceType,
-            importance,
-            currentReviewStatus: "pending",
-          },
-        });
-        const version = await tx.artifactVersion.create({
-          data: {
-            artifactId: created.id,
-            versionNumber: 1,
-            filePath,
-            fileName,
-            mimeType,
-            size: stat.size,
-            format,
-            authorEmployeeId: employeeId,
-            reviewStatus: "pending",
-          },
-        });
-        await logActivity(tx, {
-          actor: "claude_code",
-          action: "artifact.register",
-          entityType: "artifact",
-          entityId: created.id,
-          detail: { taskId, employeeId },
-        });
-
-        await startReviewForVersion(tx, {
-          artifactId: created.id,
-          artifactVersionId: version.id,
-          authorEmployeeId: employeeId ?? null,
-          departmentId: resolvedDepartmentId,
-          importance,
-        });
-
-        return tx.artifact.findUniqueOrThrow({ where: { id: created.id } });
+      const result = await registerArtifactDirect({
+        taskId,
+        employeeId,
+        departmentId,
+        title,
+        summary,
+        filePath,
+        sourceType,
+        importance,
       });
-
+      if (!result.ok) return err(result.error, result.code);
+      const artifact = await prisma.artifact.findUniqueOrThrow({ where: { id: result.artifactId } });
       return ok({ artifact });
     }
   );
@@ -208,15 +124,13 @@ export function registerArtifactTools(server: McpServer) {
       }
 
       const fileName = path.basename(filePath);
-      const mimeType = MIME_BY_EXT[path.extname(fileName).toLowerCase()] ?? "application/octet-stream";
-      const format = inferFormat(fileName);
 
       const result = await createRevisionVersion(artifactId, {
         filePath,
         fileName,
-        mimeType,
+        mimeType: inferMimeType(fileName),
         size: stat.size,
-        format,
+        format: inferFormat(fileName),
         authorEmployeeId,
       });
       if (!result.ok) return err(result.error, result.code);
