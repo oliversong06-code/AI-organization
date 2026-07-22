@@ -10,6 +10,7 @@ import { avatarColor } from "./avatar-palette";
 import { StatusBadge } from "./StatusBadge";
 import { ArtifactBubble } from "./ArtifactBubble";
 import type { EmployeeMarkerData } from "./types";
+import type { EmployeeStatus } from "@/lib/enums";
 
 interface Props {
   employee: EmployeeMarkerData;
@@ -20,6 +21,29 @@ interface Props {
 
 const AVATAR_W = 46; // rendered width in canvas px at scale=1
 const AVATAR_H = AVATAR_W * (132 / 100);
+
+/**
+ * Per-status body lean, in degrees, rotated around the avatar's feet
+ * (bottom-center of its own 0..100 x 0..132 viewBox) — a lightweight,
+ * asset-free way to give each status a distinct "posture" without
+ * drawing separate pose artwork per state. Forward lean reads as
+ * focused/active work, backward/slumped lean reads as stuck or failed;
+ * everything else stays upright.
+ */
+const POSTURE_ROTATION: Record<EmployeeStatus, number> = {
+  idle: 0,
+  queued: 0,
+  running: -3,
+  awaiting_approval: 0,
+  needs_review: 0,
+  reviewing: -3,
+  revision_requested: 3,
+  review_blocked: 6,
+  completed: 0,
+  failed: 8,
+  paused: 4,
+  archived: 0,
+};
 
 export function EmployeeMarker({ employee, zone, iso, onSelect }: Props) {
   if (employee.status === "archived") return null;
@@ -39,12 +63,14 @@ export function EmployeeMarker({ employee, zone, iso, onSelect }: Props) {
     >
       <g transform={`translate(${(-AVATAR_W / 2) * flip} ${-AVATAR_H}) scale(${flip} 1)`}>
         <g transform={`scale(${AVATAR_W / 100} ${AVATAR_H / 132})`}>
-          <use
-            href="#avatar-body"
-            width={100}
-            height={132}
-            style={{ color: avatarColor(employee.avatarId) }}
-          />
+          <g transform={`rotate(${POSTURE_ROTATION[employee.status]} 50 132)`}>
+            <use
+              href="#avatar-body"
+              width={100}
+              height={132}
+              style={{ color: avatarColor(employee.avatarId) }}
+            />
+          </g>
           <StatusBadge status={employee.status} />
           {employee.latestArtifactId && <ArtifactBubble artifactId={employee.latestArtifactId} />}
         </g>

@@ -252,9 +252,19 @@ const dividers = [
 const furniture = [];
 furniture.push(desk(...iso(0.15, 0.2)));
 furniture.push(desk(...iso(0.28, 0.32)));
+// open-workspace-1 seats 3-4 (src/lib/office-seats-config.ts normX/normY
+// 0.2/0.75 and 0.75/0.25, converted into this zone's rect) — P2-11 added
+// desk graphics for every configured seat, not just the first two.
+furniture.push(desk(...iso(0.116, 0.365)));
+furniture.push(desk(...iso(0.2975, 0.175)));
 furniture.push(desk(...iso(0.15, 0.66)));
 furniture.push(desk(...iso(0.28, 0.78)));
+// open-workspace-2 seats 3-4 (normX/normY 0.2/0.85 and 0.8/0.15)
+furniture.push(desk(...iso(0.116, 0.86)));
+furniture.push(desk(...iso(0.314, 0.58)));
 furniture.push(desk(...iso(0.52, 0.2)));
+// private-office-1 seat 2 (normX/normY 0.5/0.75)
+furniture.push(desk(...iso(0.52, 0.32)));
 furniture.push(shelf(...iso(0.58, 0.12)));
 furniture.push(table(...iso(0.52, 0.62), 26, 26));
 furniture.push(sofa(...iso(0.5, 0.88)));
@@ -271,28 +281,10 @@ furniture.push(plant(...iso(0.36, 0.94), 1));
 furniture.push(plant(...iso(0.63, 0.06), 0.9));
 furniture.push(plant(...iso(0.93, 0.9), 1.1));
 
-// ── zone labels (small, unobtrusive) ────────────────────────────────────
-
-const ZONE_LABELS = [
-  { rect: [0.05, 0.08, 0.38, 0.46], text: "개방형 업무 공간 1" },
-  { rect: [0.05, 0.52, 0.38, 0.92], text: "개방형 업무 공간 2" },
-  { rect: [0.42, 0.08, 0.62, 0.4], text: "독립 사무 공간" },
-  { rect: [0.42, 0.46, 0.62, 0.78], text: "회의 공간" },
-  { rect: [0.42, 0.82, 0.62, 0.95], text: "휴게 공간" },
-  { rect: [0.66, 0.08, 0.95, 0.92], text: "공용 결과물 공간" },
-];
-
-const labels = ZONE_LABELS.map(({ rect: [x0, y0, x1], text }) => {
-  const [lx, ly] = iso(x0 + (x1 - x0) * 0.06, y0 + 0.015);
-  const w = text.length * 15.5 + 20;
-  return `
-    <g>
-      <rect x="${fmt(lx - 8)}" y="${fmt(ly - 17)}" width="${fmt(w)}" height="24" rx="6" fill="#FFFFFF" opacity="0.78"/>
-      <text x="${fmt(lx)}" y="${fmt(
-    ly
-  )}" font-family="'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#7A6E4E">${text}</text>
-    </g>`;
-}).join("");
+// Zone labels used to be baked in here as static <text> — P2-8 replaced
+// them with ZoneLabelLayer, a client component that reads live
+// OfficeZone.displayName from /api/office-zones instead, so this
+// generator no longer emits any label markup.
 
 // ── assemble ─────────────────────────────────────────────────────────────
 
@@ -314,9 +306,6 @@ const svg = `<svg viewBox="0 0 ${VIEW_W} ${VIEW_H}" xmlns="http://www.w3.org/200
   </g>
   <g>
     ${furniture.join("")}
-  </g>
-  <g>
-    ${labels}
   </g>
 </svg>
 `;
