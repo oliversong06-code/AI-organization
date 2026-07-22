@@ -10,9 +10,15 @@ export interface ArtifactListItem {
   mimeType: string;
   size: number;
   sourceType: ArtifactSourceType;
+  importance: number;
+  currentReviewStatus: string;
   createdAt: string;
+  archivedAt: string | null;
   task: { id: string; title: string } | null;
   employee: { id: string; name: string } | null;
+  department: { id: string; name: string } | null;
+  latestVersion: { versionNumber: number; format: string } | null;
+  currentReviewer: { id: string; name: string } | null;
 }
 
 export function useArtifacts() {

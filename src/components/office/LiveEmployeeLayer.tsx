@@ -16,7 +16,7 @@ export function LiveEmployeeLayer({ scene }: { scene: OfficeScene }) {
 
   const latestArtifactByEmployee = new Map<string, string>();
   for (const artifact of artifacts) {
-    if (!artifact.employee) continue;
+    if (!artifact.employee || artifact.archivedAt) continue;
     if (!latestArtifactByEmployee.has(artifact.employee.id)) {
       latestArtifactByEmployee.set(artifact.employee.id, artifact.id); // artifacts are already newest-first
     }

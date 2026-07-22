@@ -53,50 +53,26 @@
   `create_automation`/`update_automation`/`configure_integration`/`update_integration`
   직접 실행 도구 신설. 총 도구 28개 유지. **테스트 55개 통과, `npm run build` 성공.**
 
-## 지금 진행 중이던 것 (P2-3 완료, P2-4부터 이어갈 것)
+## 지금 진행 중이던 것 (P2-9까지 완료, P2-10부터 이어갈 것)
 
-P2-3(department/employee 직접 실행 도구 + 사용자 직접 archive/rank 제어)이 2026-07-22
-세션에서 완료되었다(`employeeDirect.ts` 작성, MCP 도구 4개 신설, API 라우트 3개 신설, 웹 UI
-반영, 테스트 74개 통과, `npm run build` 성공, dev.db 데이터 보존 확인 — 자세한 내용은
-`IMPLEMENTATION_PLAN.md`의 Phase 2 진행 로그 P2-3 항목 참고).
+P2-4~P2-9가 전부 완료되어 GitHub main에 커밋+푸시됨(최신 커밋은 `git log`로 확인). 각 단계의
+자세한 내용은 `IMPLEMENTATION_PLAN.md`의 Phase 2 진행 로그를 참고 — 요약만 남기면:
+- P2-4: `create_task`/`update_task`/`assign_task` MCP 도구 + `worker/` 폴링·claim·재시도 모듈.
+- P2-5: `src/lib/review/reviewChain.ts`+`reviewWorkflow.ts` — 검수 체인 계산·착석·승인/수정요청/반려.
+- P2-6: `@react-pdf/renderer`+`@fontsource/noto-sans-kr`로 한글 PDF 생성(실측 검증 완료),
+  `completeTaskWithDocument`가 PDF 생성 성공 전엔 절대 completed 처리 안 함.
+- P2-7: `scripts/reset-skill-catalog.ts`로 미연결 seed 스킬 6개 dev.db에서 삭제(실행 완료),
+  `register_skill`/`validate_skill`/`assign_skill` MCP 도구.
+- P2-8: `office-empty.svg`의 정적 zone 라벨 제거 → `ZoneLabelLayer`(실시간 `/api/office-zones` 기반).
+- P2-9: `/artifacts` 화면을 회사공용/부서별 탭 + 상태·담당자·중요도·형식·검수자·생성일·버전 필터로 재구성.
 
-**다음은 P2-4(Task/Worker 실행 구조)** — `IMPLEMENTATION_PLAN.md`의 "구현 순서"와 "핵심 설계
-결정 > Task/Worker 실행 구조" 절에 설계가 이미 문서화되어 있다. 요약: `create_task`/
-`update_task`/`assign_task` 직접 실행 MCP 도구를 `mcp-server/tools/tasks.ts`에 추가(현재
-list_tasks/get_task/start_task/add_task_log/mark_task_needs_review/complete_task/fail_task만
-있고 생성 도구가 없는 상태), Task 생성 시 즉시 queued + 담당자 유효하면 `ExecutionJob(pending)`
-자동 생성(스키마는 P2-1에서 이미 추가됨), `worker/` 디렉터리 신설(pending Job 원자적 claim,
-동시 실행 수 제한, 모킹 가능한 `claudeCliRunner.ts`, 오래된 lock 복구, `npm run worker` 스크립트).
+**다음은 P2-10(DataAsset 서브시스템)** — 스키마는 P2-1에서 이미 추가됨(DataAsset + 연결 모델
+4종). `IMPLEMENTATION_PLAN.md`의 "구현 순서"/"핵심 설계 결정" 절에 설계 문서화돼 있음. MCP
+도구(store/list/get/search/update/archive/link_to_task) + `/data` 화면 + checksum 기반 중복
+감지 + DataAccessLog 신설이 남은 일.
 
-## 남은 전체 로드맵 (P2-4 ~ P2-14)
+## 남은 전체 로드맵 (P2-10 ~ P2-14)
 
-`IMPLEMENTATION_PLAN.md`의 "## 구현 순서"와 "## 핵심 설계 결정" 섹션에 각 단계의 구체적 설계가
-이미 문서화되어 있음. 요약:
-
-- **P2-4 Task/Worker 실행 구조**: `propose_task` 완전 폐지 완료(P2-2에서 제거함) → 이제
-  `create_task`/`update_task`/`assign_task` **직접 실행 MCP 도구**를 `mcp-server/tools/tasks.ts`에
-  추가해야 함(현재 list_tasks/get_task/start_task/add_task_log/mark_task_needs_review/
-  complete_task/fail_task만 있음, task 생성 도구가 아직 없는 상태!). Task 생성 시 즉시 queued +
-  담당자 유효하면 `ExecutionJob(pending)` 자동 생성(스키마는 이미 P2-1에서 추가됨). `worker/`
-  디렉터리 신설: pending Job 원자적 claim(조건부 updateMany), 동시 실행 수 제한, `claudeCliRunner.ts`
-  (모킹 가능한 주입형 실행자 — 실제 `claude` CLI 스폰은 이 샌드박스에서 검증 불가하니 CLI 없음을
-  전제로 방어적 구현), 오래된 lock 복구, `npm run worker` 스크립트.
-- **P2-5 검수 시스템**: `src/lib/review/reviewChain.ts`에 `computeRequiredReviewRanks(chainMode, authorRank)`
-  구현(ReviewPolicy.chainMode 4종: author_plus_one/sequential_to_rank3/min3_then_rank4/full_chain_rank4 —
-  각각의 해석은 `IMPLEMENTATION_PLAN.md` Phase 2 "검수(Review) 시스템" 절 참고). ReviewDecision 생성,
-  본인 결과물 자기검수 금지, 적절한 검수자 없으면 `review_blocked` + 필요 직급 기록, 수정요청 시
-  ArtifactVersion 새로 생성, 최대 수정 3회 초과 시 사용자에게 **알림만**(승인 요청 아님).
-- **P2-6 PDF 생성**: Windows에서 한글 안 깨지는 방식 실제 검증 필요(Playwright Chromium 인쇄 /
-  `@react-pdf/renderer` / PDFKit 후보 — 표·페이지분할·한글폰트 임베딩 실제 테스트 후 택1).
-  생성 실패 시 절대 completed 처리 금지.
-- **P2-7 스킬 초기화**: 미연결 seed 스킬 6개 dev.db에서 삭제(EmployeeSkill 0건이라 안전 확인됨,
-  P2-1 완료 시점 기준 — 재확인 필요). `register_skill`/`validate_skill`/`assign_skill` MCP 직접
-  도구 신설.
-- **P2-8 사무실 표시 이름**: OfficeZone.displayName은 P2-1/P2-2에서 이미 배필+갱신 로직 구현됨.
-  남은 일은 **프론트엔드**: `office-empty.svg`에 박혀 있는 정적 `<text>` 라벨 제거하고
-  `/api/office-zones` 데이터 기반 동적 `ZoneLabelLayer` 컴포넌트로 교체(`OfficeScene.tsx`에 추가).
-- **P2-9 결과물 부서별 분류**: `/artifacts` 화면을 회사 공용/부서별(최종/검수중/수정요청/보관)
-  구조로 재구성, 필터(부서/담당자/중요도/상태/형식/생성일/검수자/버전) 추가.
 - **P2-10 DataAsset**: 스키마는 P2-1에서 이미 추가됨. MCP 도구(store/list/get/search/update/
   archive/link_to_task) + `/data` 화면 + checksum 중복감지 + DataAccessLog 신설.
 - **P2-11 사무실 시각 개편**: Seat 모델은 P2-1에서 이미 추가·배필됨(`src/lib/office-seats-config.ts`
