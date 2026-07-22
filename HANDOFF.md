@@ -32,69 +32,36 @@
   Worker의 Claude CLI 비대화형 실행 모듈은 이를 전제로 방어적으로 구현해야 하고
   (CLI 미발견 시 Job을 failed로 안전 종료), 반복 CLI 호출 테스트는 전부 모킹한다.
 
-## 지금까지 완료된 것 (Phase 1 + Phase 2 P2-1, P2-2)
+## Phase 2 전체 완료 (2026-07-23)
 
-- **Phase 1(18단계)**: 전체 앱 기본 골격 — Next.js 16 웹앱, Prisma/SQLite, 사람 없는
-  아이소메트릭 사무실, 승인함 UI, 로컬 MCP 서버(stdio), company-manager 스킬,
-  `.mcp.json`, README, Windows 시작 스크립트. (자세한 내용은 `IMPLEMENTATION_PLAN.md`
-  앞부분 참고)
-- **P2-1**: 추가 전용 마이그레이션(`phase2_rank_review_worker_dataasset`) — Employee.rank,
-  OfficeZone.displayName/defaultDisplayName, Seat, ExecutionJob, Artifact 확장
-  (departmentId/importance/currentReviewStatus/legacy), ArtifactVersion,
-  ArtifactDepartment, ReviewPolicy, ReviewDecision, Skill 확장 필드, DataAsset+연결모델
-  4종. `scripts/migrate-policy-v2.ts`(멱등, 재실행 가능)로 zone 라벨 백필, 좌석 15개
-  생성 + 기존 직원 좌석 배정, `employeeRequestMinRank=3` 설정, ReviewPolicy 4건,
-  기존 Artifact를 legacy+ArtifactVersion v1로 백필.
-- **P2-2**: `APPROVAL_REGISTRY`를 department.create/employee.create만 남기고 축소.
-  `materialize.ts`가 부서 생성 시 빈 zone 자동배정+displayName 갱신을, 직원 생성 시
-  빈 좌석 자동배정+좌표 스냅을 같은 트랜잭션에서 처리하도록 재작성. `propose.ts`에
-  직원 채용 제안 게이팅(요청자 rank < employeeRequestMinRank면 거부) + 중복 제안 감지
-  추가. MCP: propose_task/propose_automation/propose_skill/propose_integration 제거,
-  `create_automation`/`update_automation`/`configure_integration`/`update_integration`
-  직접 실행 도구 신설. 총 도구 28개 유지. **테스트 55개 통과, `npm run build` 성공.**
+**P2-1부터 P2-14까지 14단계 전부 완료되어 GitHub main에 커밋+푸시됨.** 더 이상 이어받을
+작업이 없다 — 이 문서는 이제 순수 이력 기록이다. 각 단계 자세한 내용은
+`IMPLEMENTATION_PLAN.md`의 "Phase 2 진행 로그"를 참고(모든 단계가 변경 파일·테스트 결과·
+dev.db 보존 확인까지 기록돼 있음). 요약:
 
-## 지금 진행 중이던 것 (P2-13까지 완료, P2-14만 남음)
+- **P2-1**: 스키마 확장(Employee.rank, Seat, ExecutionJob, ArtifactVersion, ReviewPolicy/
+  ReviewDecision, DataAsset+연결모델 4종 등) + 멱등 백필 스크립트.
+- **P2-2**: 승인 화이트리스트를 department.create/employee.create 두 가지로 축소, 나머지는
+  직접 실행 도구로 전환.
+- **P2-3**: 부서/직원 직접 실행 도구(update/move/rank) + 사용자 직접 보관·직급변경 제어.
+- **P2-4**: `create_task`/`update_task`/`assign_task` + `worker/` 폴링·claim·재시도 모듈.
+- **P2-5**: 검수 체인 시스템(`reviewChain.ts`/`reviewWorkflow.ts`) — 착석·승인/수정요청/반려.
+- **P2-6**: `@react-pdf/renderer`+`@fontsource/noto-sans-kr` 한글 PDF 생성, PDF 실패 시
+  업무 completed 처리 절대 안 함.
+- **P2-7**: 미연결 seed 스킬 6개 삭제, `register_skill`/`validate_skill`/`assign_skill`.
+- **P2-8**: 사무실 zone 라벨을 정적 SVG에서 실시간 `ZoneLabelLayer`로 전환.
+- **P2-9**: `/artifacts`를 회사공용/부서별 탭 + 6종 필터로 재구성.
+- **P2-10**: DataAsset 서브시스템(MCP 도구 7개, checksum 중복감지, `/data` 화면).
+- **P2-11**: 사무실 데스크 그래픽 전 좌석 대응, 상태별 애니메이션+자세, prefers-reduced-motion.
+- **P2-12**: `.claude/skills/company-manager/SKILL.md`+`README.md`를 48개 도구 기준으로 재작성.
+- **P2-13**: `.claude/settings.json` — 48개 도구 전부 allowlist, 위험한 broad-allow 없음.
+- **P2-14**: 최종 회귀(테스트 155개/tsc/lint/build 전부 통과) + dev.db 데이터 보존 최종 확인 +
+  완료 보고.
 
-P2-4~P2-13이 전부 완료되어 GitHub main에 커밋+푸시됨(최신 커밋은 `git log`로 확인). 각 단계의
-자세한 내용은 `IMPLEMENTATION_PLAN.md`의 Phase 2 진행 로그를 참고 — 요약만 남기면:
-- P2-4: `create_task`/`update_task`/`assign_task` MCP 도구 + `worker/` 폴링·claim·재시도 모듈.
-- P2-5: `src/lib/review/reviewChain.ts`+`reviewWorkflow.ts` — 검수 체인 계산·착석·승인/수정요청/반려.
-- P2-6: `@react-pdf/renderer`+`@fontsource/noto-sans-kr`로 한글 PDF 생성(실측 검증 완료),
-  `completeTaskWithDocument`가 PDF 생성 성공 전엔 절대 completed 처리 안 함.
-- P2-7: `scripts/reset-skill-catalog.ts`로 미연결 seed 스킬 6개 dev.db에서 삭제(실행 완료),
-  `register_skill`/`validate_skill`/`assign_skill` MCP 도구.
-- P2-8: `office-empty.svg`의 정적 zone 라벨 제거 → `ZoneLabelLayer`(실시간 `/api/office-zones` 기반).
-- P2-9: `/artifacts` 화면을 회사공용/부서별 탭 + 상태·담당자·중요도·형식·검수자·생성일·버전 필터로 재구성.
-- P2-10: `src/lib/direct/dataAssetDirect.ts` + MCP 도구 7개(store/list/get/search/update/archive/
-  link_to_task, checksum 기반 중복감지 포함) + `/data` 화면 신규.
-- P2-11: 배경 SVG에 나머지 좌석(개방형×2, 독립 사무 공간×1) 데스크 그래픽 5개 추가,
-  `StatusBadge`에 `reviewing` 상태 저강도 펄스 링 추가 + `EmployeeMarker`에 상태별
-  `POSTURE_ROTATION`(자세 회전) 추가, `usePrefersReducedMotion` 훅으로 모든 애니메이션이
-  OS 설정을 존중하도록 처리.
-- P2-12: `mcp-server.test.ts`의 e2e 목록(48개 도구)이 이미 정확한 단일 진실 소스였음을 확인,
-  `.claude/skills/company-manager/SKILL.md` 전면 재작성 + `README.md`("핵심 구조" 다이어그램,
-  폴더 구조, `npm run worker`) 갱신. 코드 변경 없는 순수 문서 동기화(테스트/빌드 영향 없음).
-- P2-13: `.claude/settings.json`(프로젝트 공유, git 추적) 신설 — `mcp__company-manager__도구이름`
-  패턴으로 48개 도구 전부 allowlist 등록, Bash 전체 허용이나 `--dangerously-skip-permissions`는
-  넣지 않음(정규식으로 재검증). 기존 개인용 `.claude/settings.local.json`은 그대로 유지.
+**최종 dev.db 상태**(전부 세션 시작 시점과 동일하게 보존): company=1, officeZone=6, seat=15,
+appSetting=4, department=1("리서치·보고서팀"), employee=1("리오", rank=1), task=1(completed),
+artifact=1, artifactVersion=1, approvalRequest=4, reviewPolicy=4, activityLog=9,
+skill=0/automation=0/integration=0/dataAsset=0(의도된 zero-state).
 
-**다음은 P2-14(최종 단계)뿐이다** — `IMPLEMENTATION_PLAN.md`의 "구현 순서" 절 참고. 전체 회귀
-테스트 재확인, `npm run build`, dev.db 데이터 보존 최종 확인, 그리고 사용자가 원래 요청한
-17장 형식대로 완료 보고 작성(승인 정책/MCP 도구 목록/자동허용 목록/직급·검수 정책/PDF 방식과
-테스트 결과/부서별 분류/DataAsset 구조/사무실 디자인/데이터 마이그레이션 결과/테스트 통과 개수/
-빌드 결과/dev.db 보존 데이터 개수/실행 방법/재시작 필요 여부). 이게 끝나면 Phase 2 전체 완료.
-
-## 남은 전체 로드맵 (P2-14만 남음)
-
-- **P2-14 최종**: 전체 회귀 테스트, `npm run build`, dev.db 데이터 보존 최종 확인, 완료 보고
-  (사용자가 원래 요청한 17장 형식대로: 승인 정책/MCP 도구 목록/자동허용 목록/직급·검수 정책/
-  PDF 방식과 테스트 결과/부서별 분류/DataAsset 구조/사무실 디자인/데이터 마이그레이션 결과/
-  테스트 통과 개수/빌드 결과/dev.db 보존 데이터 개수/실행 방법/재시작 필요 여부).
-
-## 재개 방법
-
-1. `IMPLEMENTATION_PLAN.md` 전체(특히 "Phase 2" 이후) 읽기.
-2. 이 문서의 "지금 진행 중이던 것" 섹션부터 이어서 구현.
-3. 각 P2 단계 완료 시: 테스트 실행 → `npm run build` → dev.db 데이터 보존 확인 →
-   `IMPLEMENTATION_PLAN.md` 진행 로그에 기록 → git commit → 다음 단계로 (사용자 지시:
-   외부 연결/영구 삭제/해결 불가 충돌이 아니면 승인 기다리지 말고 계속 진행, 보고는 간결하게).
+앞으로 이 프로젝트에 새 작업을 시작할 때는 이 문서 대신 `IMPLEMENTATION_PLAN.md`(설계
+근거)와 `.claude/skills/company-manager/SKILL.md`(현재 동작 규칙)를 참고할 것.
