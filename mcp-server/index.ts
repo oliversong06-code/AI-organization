@@ -10,6 +10,7 @@ import { registerAutomationTools } from "./tools/automations";
 import { registerSkillTools } from "./tools/skills";
 import { registerIntegrationTools } from "./tools/integrations";
 import { registerApprovalTools } from "./tools/approvals";
+import { registerDataAssetTools } from "./tools/data-assets";
 
 /**
  * Local-only MCP server for the AI company app. stdio transport only — no
@@ -35,6 +36,7 @@ async function main() {
   registerSkillTools(server);
   registerIntegrationTools(server);
   registerApprovalTools(server);
+  registerDataAssetTools(server);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
